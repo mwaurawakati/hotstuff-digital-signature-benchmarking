@@ -36,6 +36,6 @@ if __name__ == "__main__":
     sk, vk = eddsa_key_gen()
     sig = eddsa_sign(sk, encoded_message)
     if eddsa_verify(vk, encoded_message, sig):
-        print("Good")
+        print("Signatue scheme correct")
     else:
-        print("Bad")
+        print("No...")

@@ -34,6 +34,6 @@ if __name__ == "__main__":
     sk, vk = schnorr_key_gen()
     sig = schnorr_sign(sk, encoded_message)
     if schnorr_verify(vk, encoded_message, sig):
-        print("Good")
+        print("Signatue scheme correct")
     else:
-        print("Bad")
+        print("No...")

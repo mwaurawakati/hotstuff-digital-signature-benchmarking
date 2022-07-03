@@ -44,6 +44,6 @@ if __name__ == "__main__":
     sk, vk = ecdsa_key_gen()
     sig = ecdsa_sign(sk, encoded_message)
     if ecdsa_verify(vk, encoded_message, sig):
-        print("Good")
+        print("Signatue scheme correct")
     else:
-        print("Bad")
+        print("No...")
