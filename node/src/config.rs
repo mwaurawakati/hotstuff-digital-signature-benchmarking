@@ -2,6 +2,7 @@ use consensus::{Committee as ConsensusCommittee, Parameters as ConsensusParamete
 use crypto::{generate_keypair, generate_production_keypair, PublicKey, SecretKey};
 use mempool::{Committee as MempoolCommittee, Parameters as MempoolParameters};
 use rand::rngs::StdRng;
+use rand8::Rng;
 use rand::SeedableRng as _;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -72,7 +73,7 @@ impl Export for Secret {}
 
 impl Default for Secret {
     fn default() -> Self {
-        let mut rng = StdRng::from_seed([0; 32]);
+        let rng = &mut rand8::thread_rng();
         let (name, secret) = generate_keypair(&mut rng);
         Self { name, secret }
     }

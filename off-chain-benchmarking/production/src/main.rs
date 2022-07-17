@@ -9,10 +9,18 @@ use ed25519_dalek::Keypair;
 use ed25519_dalek::{Signature, Signer};
 use bls_signatures::*;
 use bls_signatures::Signature as bls_Signatures;
+use bls_signatures::PrivateKey as bls_PrivateKey;
 use std::time::{Duration, Instant};
 
 fn main() {
-    measure_multiple_different_messages();
+    let rng = &mut rand8::thread_rng();
+    let msg: Vec<u8> = (0..64).map(|_| rng.gen()).collect();
+    let private_key = PrivateKey::generate(rng);
+    let private = private_key.as_bytes();
+    let public_key = vec![private_key.public_key()];
+    let sig = private_key.sign(&msg);
+    println!("{:?}", bls_PrivateKey::from_bytes(&private).unwrap());
+    // measure_single_message_verious_length();
 }
 
 pub fn measure_multiple_different_messages() {
@@ -55,7 +63,7 @@ pub fn measure_multiple_different_messages() {
 
 
 pub fn measure_single_message_verious_length() {
-    let num_of_iter = 10;
+    let num_of_iter = 1;
     let mut i = 1;
     let mut time: Vec<(i32, u128, u128)> = Vec::new(); 
     while i <= 100{
@@ -96,3 +104,4 @@ pub fn measure_single_message_verious_length() {
     }
     println!("{:?}", time);
 }
+
