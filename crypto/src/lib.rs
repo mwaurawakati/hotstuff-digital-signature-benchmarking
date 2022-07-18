@@ -1,12 +1,10 @@
 // Copyright(C) Facebook, Inc. and its affiliates.
-use ed25519_dalek::ed25519;
 use serde::{de, ser, Deserialize, Serialize};
 use std::array::TryFromSliceError;
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::sync::oneshot;
-use rand::Rng;
 use rand_core::{CryptoRng, RngCore};
 use bls_signatures::*;
 use bls_signatures::Serialize as bls_Serialize;
@@ -15,13 +13,12 @@ use bls_signatures::Signature as bls_Signature;
 use bls_signatures::PublicKey as bls_PublicKey;
 use bls_signatures::verify as bls_verify;
 use bls_signatures::hash as bls_hash;
-use std::time::{Duration, Instant};
 
 #[cfg(test)]
 #[path = "tests/crypto_tests.rs"]
 pub mod crypto_tests;
 
-pub type CryptoError = ed25519::Error;
+pub type CryptoError = Error;
 
 /// Represents a hash digest (32 bytes).
 #[derive(Hash, PartialEq, Default, Eq, Clone, Deserialize, Serialize, Ord, PartialOrd)]
@@ -69,7 +66,7 @@ pub trait Hash {
 
 /// Represents a public key (in bytes).
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
-pub struct PublicKey(pub [u8; 42]);
+pub struct PublicKey(pub [u8; 48]);
 
 impl PublicKey {
     pub fn encode_base64(&self) -> String {
@@ -78,7 +75,7 @@ impl PublicKey {
 
     pub fn decode_base64(s: &str) -> Result<Self, base64::DecodeError> {
         let bytes = base64::decode(s)?;
-        let array = bytes[..42]
+        let array = bytes[..48]
             .try_into()
             .map_err(|_| base64::DecodeError::InvalidLength)?;
         Ok(Self(array))
@@ -120,6 +117,13 @@ impl<'de> Deserialize<'de> for PublicKey {
 impl AsRef<[u8]> for PublicKey {
     fn as_ref(&self) -> &[u8] {
         &self.0
+    }
+}
+
+impl Default for PublicKey {
+    fn default() -> Self {
+        let default: u8 = 0;
+        Self([default; 48])
     }
 }
 
@@ -176,14 +180,15 @@ where
     R: RngCore + CryptoRng,
 {
     let private_key = bls_PrivateKey::generate(rng);
-    let secret = SecretKey(private_key.as_bytes());
-    let public_key = private_key.public_key();
-    let public = PublicKey(public_key.as_bytes());
+    let private_bytes = private_key.as_bytes();
+    let public_bytes = private_key.public_key().as_bytes();
+    let secret = SecretKey(private_bytes[..32].try_into().expect("Unexpected secret length"));
+    let public = PublicKey(public_bytes[..48].try_into().expect("Unexpected public length"));
     (public, secret)
 }
 
 /// Represents an ed25519 signature.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Signature {
     part1: [u8; 48],
     part2: [u8; 48],
@@ -213,7 +218,7 @@ impl Signature {
             return Ok(());
         }
         else{
-            return Err("verify failed.");
+            return Err(Error::GroupDecode);
         }
     }
 
@@ -221,7 +226,7 @@ impl Signature {
     where
         I: IntoIterator<Item = &'a (PublicKey, Signature)>,
     {
-        let mut messages: Vec<bls12_381::g2::G2Projective> = Vec::new();
+        let mut messages: Vec<_> = Vec::new();
         let mut signatures: Vec<bls_Signature> = Vec::new();
         let mut keys: Vec<bls_PublicKey> = Vec::new();
         for (key, sig) in votes.into_iter() {
@@ -234,8 +239,46 @@ impl Signature {
             return Ok(());
         }
         else{
-            return Err("verify failed.");
+            return Err(Error::GroupDecode);
         }
+    }
+
+    pub fn encode_base64(&self) -> String {
+        base64::encode(&self.flatten())
+    }
+
+    pub fn decode_base64(s: &str) -> Result<Self, base64::DecodeError> {
+        let bytes = base64::decode(s)?;
+        let part1 = bytes[..48].try_into().map_err(|_| base64::DecodeError::InvalidLength)?;
+        let part2 = bytes[48..96].try_into().map_err(|_| base64::DecodeError::InvalidLength)?;
+        Ok(Self { part1: part1, part2: part2 })
+    }
+}
+
+impl Serialize for Signature {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: ser::Serializer,
+    {
+        serializer.serialize_str(&self.encode_base64())
+    }
+}
+
+impl<'de> Deserialize<'de> for Signature {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let value = Self::decode_base64(&s).map_err(|e| de::Error::custom(e.to_string()))?;
+        Ok(value)
+    }
+}
+
+impl Default for Signature {
+    fn default() -> Self {
+        let default: u8 = 0;
+        Self { part1: [default; 48], part2: [default; 48] }
     }
 }
 

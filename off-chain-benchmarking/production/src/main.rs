@@ -13,14 +13,7 @@ use bls_signatures::PrivateKey as bls_PrivateKey;
 use std::time::{Duration, Instant};
 
 fn main() {
-    let rng = &mut rand8::thread_rng();
-    let msg: Vec<u8> = (0..64).map(|_| rng.gen()).collect();
-    let private_key = PrivateKey::generate(rng);
-    let private = private_key.as_bytes();
-    let public_key = vec![private_key.public_key()];
-    let sig = private_key.sign(&msg);
-    println!("{:?}", bls_PrivateKey::from_bytes(&private).unwrap());
-    // measure_single_message_verious_length();
+    measure_multiple_different_messages();
 }
 
 pub fn measure_multiple_different_messages() {
