@@ -6,13 +6,14 @@ use std::fmt;
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::sync::oneshot;
 use rand_core::{CryptoRng, RngCore};
-use bls_signatures::*;
 use bls_signatures::Serialize as bls_Serialize;
 use bls_signatures::PrivateKey as bls_PrivateKey;
 use bls_signatures::Signature as bls_Signature;
 use bls_signatures::PublicKey as bls_PublicKey;
 use bls_signatures::verify as bls_verify;
 use bls_signatures::hash as bls_hash;
+use bls_signatures::Error;
+// use bls_signatures::aggregate;
 
 #[cfg(test)]
 #[path = "tests/crypto_tests.rs"]
@@ -204,10 +205,7 @@ impl Signature {
     }
 
     fn flatten(&self) -> [u8; 96] {
-        [self.part1, self.part2]
-            .concat()
-            .try_into()
-            .expect("Unexpected signature length")
+        [self.part1, self.part2].concat().try_into().expect("Unexpected signature length")
     }
 
     pub fn verify(&self, digest: &Digest, public_key: &PublicKey) -> Result<(), CryptoError> {
@@ -226,21 +224,15 @@ impl Signature {
     where
         I: IntoIterator<Item = &'a (PublicKey, Signature)>,
     {
-        let mut messages: Vec<_> = Vec::new();
-        let mut signatures: Vec<bls_Signature> = Vec::new();
-        let mut keys: Vec<bls_PublicKey> = Vec::new();
+        let msg = vec![bls_hash(&digest.0)];
         for (key, sig) in votes.into_iter() {
-            messages.push(bls_hash(&digest.0[..]));
-            signatures.push(bls_Signature::from_bytes(&sig.flatten()).unwrap());
-            keys.push(bls_PublicKey::from_bytes(&key.0).unwrap());
+            let signature = bls_Signature::from_bytes(&sig.flatten()).unwrap();
+            let pub_key = vec![bls_PublicKey::from_bytes(&key.0).unwrap()];
+            if bls_verify(&signature, &msg[..], &pub_key) == false {
+                return Err(Error::GroupDecode);
+            }
         }
-        let aggregated_sig = aggregate(&signatures[..]).unwrap();
-        if bls_verify(&aggregated_sig, &messages[..], &keys){
-            return Ok(());
-        }
-        else{
-            return Err(Error::GroupDecode);
-        }
+        return Ok(());
     }
 
     pub fn encode_base64(&self) -> String {
@@ -277,8 +269,9 @@ impl<'de> Deserialize<'de> for Signature {
 
 impl Default for Signature {
     fn default() -> Self {
-        let default: u8 = 0;
-        Self { part1: [default; 48], part2: [default; 48] }
+        let part_one: [u8; 48] = [162, 232, 231, 10, 66, 26, 80, 44, 248, 229, 168, 94, 63, 157, 110, 50, 124, 171, 134, 165, 183, 122, 42, 133, 192, 223, 88, 80, 96, 242, 127, 15, 82, 106, 91, 229, 103, 242, 122, 173, 51, 129, 249, 42, 151, 211, 196, 205];
+        let part_two: [u8; 48] = [7, 42, 35, 183, 33, 205, 246, 184, 216, 200, 128, 174, 31, 24, 37, 63, 14, 80, 182, 71, 247, 165, 139, 173, 165, 75, 104, 117, 124, 27, 234, 105, 70, 118, 0, 217, 180, 7, 208, 40, 20, 60, 208, 195, 148, 15, 48, 201];
+        Self { part1: part_one, part2: part_two }
     }
 }
 

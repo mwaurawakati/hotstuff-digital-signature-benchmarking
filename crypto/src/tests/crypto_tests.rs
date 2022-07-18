@@ -2,8 +2,6 @@
 use super::*;
 use ed25519_dalek::Digest as _;
 use ed25519_dalek::Sha512;
-use rand::rngs::StdRng;
-use rand::SeedableRng as _;
 
 impl Hash for &[u8] {
     fn digest(&self) -> Digest {
@@ -24,8 +22,8 @@ impl fmt::Debug for SecretKey {
 }
 
 pub fn keys() -> Vec<(PublicKey, SecretKey)> {
-    let mut rng = StdRng::from_seed([0; 32]);
-    (0..4).map(|_| generate_keypair(&mut rng)).collect()
+    let rng = &mut rand::thread_rng();
+    (0..4).map(|_| generate_keypair(rng)).collect()
 }
 
 #[test]
@@ -90,6 +88,7 @@ fn verify_valid_batch() {
         .collect();
 
     // Verify the batch.
+    // println!("{:?}", Signature::verify_batch(&digest, &signatures).is_ok());
     assert!(Signature::verify_batch(&digest, &signatures).is_ok());
 }
 

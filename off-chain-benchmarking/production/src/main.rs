@@ -13,7 +13,7 @@ use bls_signatures::PrivateKey as bls_PrivateKey;
 use std::time::{Duration, Instant};
 
 fn main() {
-    measure_multiple_different_messages();
+    measure_single_message_verious_length();
 }
 
 pub fn measure_multiple_different_messages() {
