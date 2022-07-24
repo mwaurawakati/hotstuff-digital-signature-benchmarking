@@ -4,16 +4,18 @@ use bytes::Bytes;
 #[cfg(feature = "benchmark")]
 use crypto::Digest;
 use crypto::PublicKey;
+use crypto::Signature;
 #[cfg(feature = "benchmark")]
 use ed25519_dalek::{Digest as _, Sha512};
 #[cfg(feature = "benchmark")]
-use log::info;
+use log::{info, warn};
 use network::ReliableSender;
 #[cfg(feature = "benchmark")]
 use std::convert::TryInto as _;
 use std::net::SocketAddr;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::{sleep, Duration, Instant};
+
 
 #[cfg(test)]
 #[path = "tests/batch_maker_tests.rs"]
@@ -75,11 +77,23 @@ impl BatchMaker {
             tokio::select! {
                 // Assemble client transactions into batches of preset size.
                 Some(transaction) = self.rx_transaction.recv() => {
-                    self.current_batch_size += transaction.len();
-                    self.current_batch.push(transaction);
-                    if self.current_batch_size >= self.batch_size {
-                        self.seal().await;
-                        timer.as_mut().reset(Instant::now() + Duration::from_millis(self.max_batch_delay));
+                    // verify the transaction signature
+                    let message = &transaction[..transaction.len()-144];
+                    let public_key_bytes = &transaction[transaction.len()-144..transaction.len()-96];
+                    let signature_bytes = &transaction[transaction.len()-96..];
+                    let digest = Digest(Sha512::digest(&message).as_slice()[..32].try_into().unwrap());
+                    let signature = Signature::from_bytes(signature_bytes[..48].try_into().unwrap(), signature_bytes[48..96].try_into().unwrap());
+                    let public_key = PublicKey(public_key_bytes.try_into().unwrap());
+                    if signature.verify(&digest, &public_key).is_ok(){
+                        self.current_batch_size += transaction.len();
+                        self.current_batch.push(transaction);
+                        if self.current_batch_size >= self.batch_size {
+                            self.seal().await;
+                            timer.as_mut().reset(Instant::now() + Duration::from_millis(self.max_batch_delay));
+                        }
+                    }
+                    else{
+                        warn!("Transaction signature verification failed!");
                     }
                 },
 

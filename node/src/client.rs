@@ -11,6 +11,10 @@ use std::net::SocketAddr;
 use tokio::net::TcpStream;
 use tokio::time::{interval, sleep, Duration, Instant};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
+use crypto::{PublicKey, SecretKey, Signature, Digest};
+use ed25519_dalek::Digest as _;
+use ed25519_dalek::Sha512;
+use std::convert::TryInto;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -60,7 +64,11 @@ async fn main() -> Result<()> {
     info!("Node address: {}", target);
     info!("Transactions size: {} B", size);
     info!("Transactions rate: {} tx/s", rate);
+    
+    let (public_key, secret_key) = crypto::generate_production_keypair();
     let client = Client {
+        public_key,
+        secret_key,
         target,
         size,
         rate,
@@ -76,6 +84,8 @@ async fn main() -> Result<()> {
 }
 
 struct Client {
+    public_key: PublicKey,
+    secret_key: SecretKey,
     target: SocketAddr,
     size: usize,
     rate: u64,
@@ -102,7 +112,7 @@ impl Client {
 
         // Submit all transactions.
         let burst = self.rate / PRECISION;
-        let mut tx = BytesMut::with_capacity(self.size);
+        let mut tx = BytesMut::with_capacity(self.size+48+96);
         let mut counter = 0;
         let mut r = rand::thread_rng().gen();
         let mut transport = Framed::new(stream, LengthDelimitedCodec::new());
@@ -130,7 +140,16 @@ impl Client {
                     tx.put_u64(r); // Ensures all clients send different txs.
                 };
                 tx.resize(self.size, 0u8);
+
+                // sign the transaction
+                let message = &tx[..];
+                let digest = Digest(Sha512::digest(&message).as_slice()[..32].try_into().unwrap());
+                let signature = Signature::new(&digest, &self.secret_key);
+                tx.put_slice(&self.public_key.0[..]);
+                tx.put_slice(&signature.flatten());
                 let bytes = tx.split().freeze();
+                info!("{:?}", bytes);
+
 
                 if let Err(e) = transport.send(bytes).await {
                     warn!("Failed to send transaction: {}", e);

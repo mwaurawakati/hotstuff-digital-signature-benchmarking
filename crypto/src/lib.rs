@@ -204,9 +204,14 @@ impl Signature {
         Signature { part1, part2 }
     }
 
-    fn flatten(&self) -> [u8; 96] {
+    pub fn flatten(&self) -> [u8; 96] {
         [self.part1, self.part2].concat().try_into().expect("Unexpected signature length")
     }
+
+    pub fn from_bytes(part1: [u8; 48], part2: [u8; 48]) -> Self {
+        Signature { part1, part2 }
+    }
+    
 
     pub fn verify(&self, digest: &Digest, public_key: &PublicKey) -> Result<(), CryptoError> {
         let sig = bls_Signature::from_bytes(&self.flatten()).unwrap();
