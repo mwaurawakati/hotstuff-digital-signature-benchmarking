@@ -190,7 +190,11 @@ impl Signature {
         Signature { part1, part2 }
     }
 
-    fn flatten(&self) -> [u8; 64] {
+    pub fn from_bytes(part1: [u8; 32], part2: [u8; 32]) -> Self {
+        Signature { part1, part2 }
+    }
+
+    pub fn flatten(&self) -> [u8; 64] {
         [self.part1, self.part2]
             .concat()
             .try_into()
