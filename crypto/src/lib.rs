@@ -10,6 +10,7 @@ use bls_signatures::Serialize as bls_Serialize;
 use bls_signatures::PrivateKey as bls_PrivateKey;
 use bls_signatures::Signature as bls_Signature;
 use bls_signatures::PublicKey as bls_PublicKey;
+use bls_signatures::aggregate as bls_aggregate;
 use bls_signatures::verify as bls_verify;
 use bls_signatures::hash as bls_hash;
 use bls_signatures::Error;
@@ -238,6 +239,26 @@ impl Signature {
             }
         }
         return Ok(());
+    }
+
+    pub fn verify_aggregated_signature(&self, digests: &Vec<Digest>, public_keys: &Vec<PublicKey>) -> Result<(), CryptoError> {
+        let messages: Vec<_> = digests.into_iter().map(|digest| bls_hash(&digest.0)).collect();
+        let pub_keys: Vec<_> = public_keys.into_iter().map(|public_key| bls_PublicKey::from_bytes(&public_key.0).unwrap()).collect();
+        let sig = bls_Signature::from_bytes(&self.flatten()).unwrap();
+        if bls_verify(&sig, &messages[..], &pub_keys[..]){
+            return Ok(());
+        }
+        else{
+            return Err(Error::GroupDecode);
+        }
+    }
+
+    pub fn aggregate_signatures(signatures: &Vec<Signature>) -> Self {
+        let sigs: Vec<_> = signatures.into_iter().map(|signature| bls_Signature::from_bytes(&signature.flatten()).unwrap()).collect();
+        let sig = bls_aggregate(&sigs[..]).unwrap().as_bytes();
+        let part1 = sig[..48].try_into().expect("Unexpected signature length");
+        let part2 = sig[48..96].try_into().expect("Unexpected signature length");
+        Signature { part1, part2 }
     }
 
     pub fn encode_base64(&self) -> String {
