@@ -149,6 +149,7 @@ impl Vote {
 impl Hash for Vote {
     fn digest(&self) -> Digest {
         let mut hasher = Sha512::new();
+        hasher.update(&self.author);
         hasher.update(&self.hash);
         hasher.update(self.round.to_le_bytes());
         Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
@@ -165,7 +166,8 @@ impl fmt::Debug for Vote {
 pub struct QC {
     pub hash: Digest,
     pub round: Round,
-    pub votes: Vec<(PublicKey, Signature)>,
+    pub votes: Vec<PublicKey>,
+    pub signature: Signature,
 }
 
 impl QC {
@@ -181,12 +183,14 @@ impl QC {
         // Ensure the QC has a quorum.
         let mut weight = 0;
         let mut used = HashSet::new();
-        for (name, _) in self.votes.iter() {
+        let mut digests = Vec::new();
+        for name in self.votes.iter() {
             ensure!(!used.contains(name), ConsensusError::AuthorityReuse(*name));
             let voting_rights = committee.stake(name);
             ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
             used.insert(*name);
             weight += voting_rights;
+            digests.push(self.vote_digest(name));
         }
         ensure!(
             weight >= committee.quorum_threshold(),
@@ -194,7 +198,16 @@ impl QC {
         );
 
         // Check the signatures.
-        Signature::verify_batch(&self.digest(), &self.votes).map_err(ConsensusError::from)
+        // Signature::verify_batch(&self.digest(), &self.votes).map_err(ConsensusError::from)
+        self.signature.verify_aggregated_signature(&digests, &self.votes).map_err(ConsensusError::from)
+    }
+
+    fn vote_digest(&self, pub_key: &PublicKey) -> Digest {
+        let mut hasher = Sha512::new();
+        hasher.update(pub_key);
+        hasher.update(&self.hash);
+        hasher.update(self.round.to_le_bytes());
+        Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
     }
 }
 

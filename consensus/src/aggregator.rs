@@ -84,10 +84,13 @@ impl QCMaker {
         self.weight += committee.stake(&author);
         if self.weight >= committee.quorum_threshold() {
             self.weight = 0; // Ensures QC is only made once.
+            let (public_keys, signatures) = self.votes.iter().map(|(a,b)| (a.clone(),b.clone())).unzip();
+            let aggregated_sig = Signature::aggregate_signatures(&signatures);
             return Ok(Some(QC {
                 hash: vote.hash.clone(),
                 round: vote.round,
-                votes: self.votes.clone(),
+                votes: public_keys,
+                signature: aggregated_sig,
             }));
         }
         Ok(None)
