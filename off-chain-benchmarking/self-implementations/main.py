@@ -51,7 +51,14 @@ bls_sigs = [bls_sign(bls_sks[i], msgs[i]) for i in range(NUMBER_OF_SIGS)]
 bls_aggregated_sig = bls_aggregate(bls_sigs)
 start_time = time.time()
 bls_verify_aggregate(bls_aggregated_sig, bls_vks, msgs)
-print("BLS: --- %s seconds ---" % (time.time() - start_time))
+print("BLS signature aggregation: --- %s seconds ---" % (time.time() - start_time))
+
+message = "hello".encode("utf8")
+bls_sigs = [bls_sign(bls_sks[i], message) for i in range(NUMBER_OF_SIGS)]
+bls_aggregated_sig = modified_bls_aggregate(bls_vks, bls_sigs)
+start_time = time.time()
+modified_bls_verify_aggregate(bls_aggregated_sig, bls_vks, message)
+print("BLS multisignature: --- %s seconds ---" % (time.time() - start_time))
 
 ecdsa_keys = [ecdsa_key_gen() for _ in range(NUMBER_OF_SIGS)]
 ecdsa_sks = [i[0] for i in ecdsa_keys]

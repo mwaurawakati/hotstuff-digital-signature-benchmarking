@@ -16,11 +16,11 @@ def local(ctx):
         'nodes': 4,
         'rate': 1_000,
         'tx_size': 512,
-        'duration': 10,
+        'duration': 60,
     }
     node_params = {
         'consensus': {
-            'timeout_delay': 1_000,
+            'timeout_delay': 3_000,
             'sync_retry_delay': 10_000,
         },
         'mempool': {
