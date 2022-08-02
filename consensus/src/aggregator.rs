@@ -5,7 +5,6 @@ use crate::messages::{Timeout, Vote, QC, TC};
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, Signature};
 use std::collections::{HashMap, HashSet};
-use log::warn;
 
 #[cfg(test)]
 #[path = "tests/aggregator_tests.rs"]
@@ -85,13 +84,13 @@ impl QCMaker {
         self.weight += committee.stake(&author);
         if self.weight >= committee.quorum_threshold() {
             self.weight = 0; // Ensures QC is only made once.
-            let (public_keys, signatures) = self.votes.iter().map(|(a,b)| (a.clone(),b.clone())).unzip();
+            let (public_keys, signatures): (Vec<PublicKey>, Vec<Signature>) = self.votes.iter().map(|(a,b)| (a.clone(),b.clone())).unzip();
             let aggregated_sig = Signature::multisig_aggregate(&public_keys, &signatures).unwrap();
-            warn!("{:?}", aggregated_sig);
             return Ok(Some(QC {
                 hash: vote.hash.clone(),
                 round: vote.round,
                 votes: public_keys,
+                // votes: self.votes.clone(),
                 signature: aggregated_sig,
             }));
         }

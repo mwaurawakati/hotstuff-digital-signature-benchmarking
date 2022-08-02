@@ -15,3 +15,4 @@ base64 = "0.13.0"
 bls-signatures = { git = "https://github.com/filecoin-project/bls-signatures/" }
 bls12_381 = { version = "=0.7.0", features = ["experimental"] }
 sha2 = { version = "0.9"}
+ff = "0.12"

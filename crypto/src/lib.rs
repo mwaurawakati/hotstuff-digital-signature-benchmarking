@@ -265,19 +265,16 @@ impl Signature {
 
     pub fn multisig_aggregate(public_keys: &Vec<PublicKey>, signatures: &Vec<Signature>) -> Result<Self, CryptoError> {
         if public_keys.len() != signatures.len() {
-            return Err(Error::SizeMismatch)
+            return Err(Error::SizeMismatch);
         }
         if signatures.len() == 0 {
-            return Err(Error::ZeroSizedInput)
+            return Err(Error::ZeroSizedInput);
         }
-
         let mut t = Vec::new();
         for pk in public_keys {
-            let mut hasher = Sha256::new();
-            hasher.update(pk.encode_base64());
-            let result = hasher.finalize();
-            t.push(Scalar::from_bytes(result[..].try_into().unwrap()).unwrap());
+            t.push(Self::hash_to_scalar(pk.encode_base64()));
         }
+        
         let mut aggregated_sig = G2Projective::identity();
         for i in 0..t.len(){
             let g2point = G2Affine::from_compressed(&signatures[i].flatten()).unwrap();
@@ -296,10 +293,7 @@ impl Signature {
 
         let mut t = Vec::new();
         for pk in public_keys {
-            let mut hasher = Sha256::new();
-            hasher.update(pk.encode_base64());
-            let result = hasher.finalize();
-            t.push(Scalar::from_bytes(result[..].try_into().unwrap()).unwrap());
+            t.push(Self::hash_to_scalar(pk.encode_base64()));
         }
         let mut aggregated_pk = G1Projective::identity();
         for i in 0..t.len(){
@@ -308,6 +302,28 @@ impl Signature {
         }
         let apk = PublicKey(bls_PublicKey::from(aggregated_pk).as_bytes()[..].try_into().expect("Unexpected public key length"));
         return self.verify(digest, &apk)
+    }
+
+    fn hash_to_scalar(content: String) -> Scalar {
+        let mut hasher = Sha256::new();
+        hasher.update(content);
+        let hash: [u8; 32] = hasher.finalize()[..].try_into().unwrap();
+        let mut le_hash = [0u8; 32];
+        for i in 0..hash.len()-4{
+            if i % 4 == 0{
+                le_hash[i] = hash[i+3];
+            }
+            if i % 4 == 1{
+                le_hash[i] = hash[i+1];
+            }
+            if i % 4 == 2{
+                le_hash[i] = hash[i-1];
+            }
+            if i % 4 == 3{
+                le_hash[i] = hash[i-3];
+            }
+        }
+        return Scalar::from_bytes(&le_hash).unwrap();
     }
 
     pub fn encode_base64(&self) -> String {

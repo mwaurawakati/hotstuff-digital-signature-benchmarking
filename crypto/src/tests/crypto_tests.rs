@@ -112,6 +112,51 @@ fn verify_invalid_batch() {
     assert!(Signature::verify_batch(&digest, &signatures).is_err());
 }
 
+#[test]
+fn verify_valid_multisig() {
+    // Make signatures.
+    let message: &[u8] = b"Hello, world!";
+    let digest = message.digest();
+    let mut keys = keys();
+    let signatures: Vec<_> = (0..3)
+        .map(|_| {
+            let (public_key, secret_key) = keys.pop().unwrap();
+            (public_key, Signature::new(&digest, &secret_key))
+        })
+        .collect();
+    
+    let (public_keys, sigs): (Vec<PublicKey>, Vec<Signature>) = signatures.iter().map(|(a,b)| (a.clone(),b.clone())).unzip();
+    let asig = Signature::multisig_aggregate(&public_keys, &sigs).unwrap();
+
+    // Verify the batch.
+    assert!(asig.multisig_verify(&public_keys, &digest).is_ok());
+}
+
+#[test]
+fn verify_invalid_multisig() {
+    // Make 2 valid signatures.
+    let message: &[u8] = b"Hello, world!";
+    let digest = message.digest();
+    let mut keys = keys();
+    let signatures: Vec<_> = (0..2)
+        .map(|_| {
+            let (public_key, secret_key) = keys.pop().unwrap();
+            (public_key, Signature::new(&digest, &secret_key))
+        })
+        .collect();
+
+    let (mut public_keys, mut sigs): (Vec<PublicKey>, Vec<Signature>) = signatures.iter().map(|(a,b)| (a.clone(),b.clone())).unzip();
+
+    // Add an invalid signature.
+    let (public_key, _) = keys.pop().unwrap();
+    public_keys.push(public_key);
+    sigs.push(Signature::default());
+    let asig = Signature::multisig_aggregate(&public_keys, &sigs).unwrap();
+
+    // Verify the batch.
+    assert!(asig.multisig_verify(&public_keys, &digest).is_err());
+}
+
 #[tokio::test]
 async fn signature_service() {
     // Get a keypair.
