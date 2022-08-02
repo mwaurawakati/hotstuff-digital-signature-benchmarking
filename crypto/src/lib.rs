@@ -14,7 +14,9 @@ use bls_signatures::aggregate as bls_aggregate;
 use bls_signatures::verify as bls_verify;
 use bls_signatures::hash as bls_hash;
 use bls_signatures::Error;
-// use bls_signatures::aggregate;
+use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
+use sha2::Digest as sha2_digest;
+use sha2::Sha256;
 
 #[cfg(test)]
 #[path = "tests/crypto_tests.rs"]
@@ -261,6 +263,53 @@ impl Signature {
         Signature { part1, part2 }
     }
 
+    pub fn multisig_aggregate(public_keys: &Vec<PublicKey>, signatures: &Vec<Signature>) -> Result<Self, CryptoError> {
+        if public_keys.len() != signatures.len() {
+            return Err(Error::SizeMismatch)
+        }
+        if signatures.len() == 0 {
+            return Err(Error::ZeroSizedInput)
+        }
+
+        let mut t = Vec::new();
+        for pk in public_keys {
+            let mut hasher = Sha256::new();
+            hasher.update(pk.encode_base64());
+            let result = hasher.finalize();
+            t.push(Scalar::from_bytes(result[..].try_into().unwrap()).unwrap());
+        }
+        let mut aggregated_sig = G2Projective::identity();
+        for i in 0..t.len(){
+            let g2point = G2Affine::from_compressed(&signatures[i].flatten()).unwrap();
+            aggregated_sig += g2point * t[i];
+        }
+        let sig = bls_Signature::from(aggregated_sig).as_bytes();
+        let part1 = sig[..48].try_into().expect("Unexpected signature length");
+        let part2 = sig[48..96].try_into().expect("Unexpected signature length");
+        return Ok(Signature { part1, part2 })
+    }
+
+    pub fn multisig_verify(&self, public_keys: &Vec<PublicKey>, digest: &Digest) -> Result<(), CryptoError> {
+        if public_keys.len() == 0 {
+            return Err(Error::ZeroSizedInput)
+        }
+
+        let mut t = Vec::new();
+        for pk in public_keys {
+            let mut hasher = Sha256::new();
+            hasher.update(pk.encode_base64());
+            let result = hasher.finalize();
+            t.push(Scalar::from_bytes(result[..].try_into().unwrap()).unwrap());
+        }
+        let mut aggregated_pk = G1Projective::identity();
+        for i in 0..t.len(){
+            let g1point = G1Affine::from_compressed(&public_keys[i].0).unwrap();
+            aggregated_pk += g1point * t[i];
+        }
+        let apk = PublicKey(bls_PublicKey::from(aggregated_pk).as_bytes()[..].try_into().expect("Unexpected public key length"));
+        return self.verify(digest, &apk)
+    }
+
     pub fn encode_base64(&self) -> String {
         base64::encode(&self.flatten())
     }
@@ -295,6 +344,7 @@ impl<'de> Deserialize<'de> for Signature {
 
 impl Default for Signature {
     fn default() -> Self {
+        // A random signature
         let part_one: [u8; 48] = [162, 232, 231, 10, 66, 26, 80, 44, 248, 229, 168, 94, 63, 157, 110, 50, 124, 171, 134, 165, 183, 122, 42, 133, 192, 223, 88, 80, 96, 242, 127, 15, 82, 106, 91, 229, 103, 242, 122, 173, 51, 129, 249, 42, 151, 211, 196, 205];
         let part_two: [u8; 48] = [7, 42, 35, 183, 33, 205, 246, 184, 216, 200, 128, 174, 31, 24, 37, 63, 14, 80, 182, 71, 247, 165, 139, 173, 165, 75, 104, 117, 124, 27, 234, 105, 70, 118, 0, 217, 180, 7, 208, 40, 20, 60, 208, 195, 148, 15, 48, 201];
         Self { part1: part_one, part2: part_two }
