@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::convert::TryInto;
 use std::fmt;
+use log::warn;
 
 #[cfg(test)]
 #[path = "tests/messages_tests.rs"]
@@ -195,7 +196,6 @@ impl QC {
         );
 
         // Check the signatures.
-        // Signature::verify_batch(&self.digest(), &self.votes).map_err(ConsensusError::from)
         self.signature.multisig_verify(&self.votes, &self.digest()).map_err(ConsensusError::from)
     }
 }

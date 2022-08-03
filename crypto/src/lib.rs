@@ -84,6 +84,42 @@ impl PublicKey {
             .map_err(|_| base64::DecodeError::InvalidLength)?;
         Ok(Self(array))
     }
+
+    pub fn hash_to_scalar(&self) -> Scalar {
+        let mut hasher = Sha256::new();
+        hasher.update(&self.encode_base64());
+        let hash: [u8; 32] = hasher.finalize()[..].try_into().unwrap();
+        let mut le_hash = [0u8; 32];
+        for i in 0..hash.len()-4{
+            if i % 4 == 0{
+                le_hash[i] = hash[i+3];
+            }
+            if i % 4 == 1{
+                le_hash[i] = hash[i+1];
+            }
+            if i % 4 == 2{
+                le_hash[i] = hash[i-1];
+            }
+            if i % 4 == 3{
+                le_hash[i] = hash[i-3];
+            }
+        }
+        return Scalar::from_bytes(&le_hash).unwrap();
+    }
+
+    pub fn aggregate_public_keys(public_keys: &Vec<PublicKey>) -> Self {
+        let mut t = Vec::new();
+        for pk in public_keys {
+            t.push(pk.hash_to_scalar());
+        }
+        let mut aggregated_pk = G1Projective::identity();
+        for i in 0..t.len(){
+            let g1point = G1Affine::from_compressed(&public_keys[i].0).unwrap();
+            aggregated_pk += g1point * t[i];
+        }
+        let apk = PublicKey(bls_PublicKey::from(aggregated_pk).as_bytes()[..].try_into().expect("Unexpected public key length"));
+        return apk;
+    }
 }
 
 impl fmt::Debug for PublicKey {
@@ -272,7 +308,7 @@ impl Signature {
         }
         let mut t = Vec::new();
         for pk in public_keys {
-            t.push(Self::hash_to_scalar(pk.encode_base64()));
+            t.push(pk.hash_to_scalar());
         }
         
         let mut aggregated_sig = G2Projective::identity();
@@ -290,40 +326,8 @@ impl Signature {
         if public_keys.len() == 0 {
             return Err(Error::ZeroSizedInput)
         }
-
-        let mut t = Vec::new();
-        for pk in public_keys {
-            t.push(Self::hash_to_scalar(pk.encode_base64()));
-        }
-        let mut aggregated_pk = G1Projective::identity();
-        for i in 0..t.len(){
-            let g1point = G1Affine::from_compressed(&public_keys[i].0).unwrap();
-            aggregated_pk += g1point * t[i];
-        }
-        let apk = PublicKey(bls_PublicKey::from(aggregated_pk).as_bytes()[..].try_into().expect("Unexpected public key length"));
+        let apk = PublicKey::aggregate_public_keys(public_keys);
         return self.verify(digest, &apk)
-    }
-
-    fn hash_to_scalar(content: String) -> Scalar {
-        let mut hasher = Sha256::new();
-        hasher.update(content);
-        let hash: [u8; 32] = hasher.finalize()[..].try_into().unwrap();
-        let mut le_hash = [0u8; 32];
-        for i in 0..hash.len()-4{
-            if i % 4 == 0{
-                le_hash[i] = hash[i+3];
-            }
-            if i % 4 == 1{
-                le_hash[i] = hash[i+1];
-            }
-            if i % 4 == 2{
-                le_hash[i] = hash[i-1];
-            }
-            if i % 4 == 3{
-                le_hash[i] = hash[i-3];
-            }
-        }
-        return Scalar::from_bytes(&le_hash).unwrap();
     }
 
     pub fn encode_base64(&self) -> String {
