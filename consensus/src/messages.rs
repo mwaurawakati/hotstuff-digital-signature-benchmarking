@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::convert::TryInto;
 use std::fmt;
-use log::warn;
 
 #[cfg(test)]
 #[path = "tests/messages_tests.rs"]
@@ -166,8 +165,9 @@ impl fmt::Debug for Vote {
 pub struct QC {
     pub hash: Digest,
     pub round: Round,
-    pub votes: Vec<PublicKey>,
+    pub votes: Vec<bool>,
     pub signature: Signature,
+    pub apk: PublicKey,
 }
 
 impl QC {
@@ -183,7 +183,8 @@ impl QC {
         // Ensure the QC has a quorum.
         let mut weight = 0;
         let mut used = HashSet::new();
-        for name in self.votes.iter() {
+        let pks = committee.binary_repr_to_public_keys(&self.votes);
+        for name in pks.iter() {
             ensure!(!used.contains(name), ConsensusError::AuthorityReuse(*name));
             let voting_rights = committee.stake(name);
             ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
@@ -196,7 +197,10 @@ impl QC {
         );
 
         // Check the signatures.
-        self.signature.multisig_verify(&self.votes, &self.digest()).map_err(ConsensusError::from)
+        let neg_votes = self.votes.iter().map(|vote| !vote).collect();
+        let neg_pks = committee.binary_repr_to_public_keys(&neg_votes);
+        let apk = self.apk.batch_sub(&neg_pks);
+        self.signature.verify(&self.digest(), &apk).map_err(ConsensusError::from)
     }
 }
 

@@ -82,4 +82,39 @@ impl Committee {
             .map(|(name, x)| (*name, x.address))
             .collect()
     }
+
+    pub fn all_public_keys(&self) -> Vec<PublicKey> {
+        self.authorities
+            .iter()
+            .map(|(name, _)| *name)
+            .collect()
+    }
+
+    pub fn index(&self, name: &PublicKey) -> Option<usize> {
+        self.authorities.keys().position(|pk| pk==name)
+    }
+
+    // pub fn public_key_by_index(&self, index: u32) -> PublicKey {
+    //     self.authorities
+    // }
+
+    pub fn public_keys_to_binary_repr(&self, pks: &Vec<PublicKey>) -> Vec<bool> {
+        let mut binary = vec![false; self.authorities.len()];
+        for pk in pks{
+            let i = self.index(&pk).unwrap();
+            binary[i] = true;
+        }
+        return binary;
+    }
+
+    pub fn binary_repr_to_public_keys(&self, binary_repr: &Vec<bool>) -> Vec<PublicKey> {
+        let mut keys = self.authorities.keys();
+        let mut pks: Vec<PublicKey> = Vec::new();
+        for i in 0..binary_repr.len(){
+            if binary_repr[i] == true {
+                pks.push(*keys.nth(i).unwrap());
+            }
+        }
+        return pks;
+    }
 }

@@ -89,6 +89,7 @@ impl PublicKey {
         let mut hasher = Sha256::new();
         hasher.update(&self.encode_base64());
         let hash: [u8; 32] = hasher.finalize()[..].try_into().unwrap();
+        // convert the hash to little endian
         let mut le_hash = [0u8; 32];
         for i in 0..hash.len()-4{
             if i % 4 == 0{
@@ -118,6 +119,20 @@ impl PublicKey {
             aggregated_pk += g1point * t[i];
         }
         let apk = PublicKey(bls_PublicKey::from(aggregated_pk).as_bytes()[..].try_into().expect("Unexpected public key length"));
+        return apk;
+    }
+
+    pub fn sub(&self, other_pk: &PublicKey) -> Self {
+        let this_pk = G1Affine::from_compressed(&self.0).unwrap();
+        let result: G1Projective = G1Projective::from(&this_pk) - G1Affine::from_compressed(&other_pk.0).unwrap();
+        return PublicKey(bls_PublicKey::from(result).as_bytes()[..].try_into().expect("Unexpected public key length"));
+    }
+
+    pub fn batch_sub(&self, other_pks: &Vec<PublicKey>) -> Self {
+        let mut apk = PublicKey(self.0);
+        for pk in other_pks.iter() {
+            apk = apk.sub(pk);
+        }
         return apk;
     }
 }
