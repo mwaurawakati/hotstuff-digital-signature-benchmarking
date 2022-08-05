@@ -108,11 +108,11 @@ impl Committee {
     }
 
     pub fn binary_repr_to_public_keys(&self, binary_repr: &Vec<bool>) -> Vec<PublicKey> {
-        let mut keys = self.authorities.keys();
+        let keys = self.authorities.keys();
         let mut pks: Vec<PublicKey> = Vec::new();
         for i in 0..binary_repr.len(){
             if binary_repr[i] == true {
-                pks.push(*keys.nth(i).unwrap());
+                pks.push(*keys.clone().nth(i).unwrap());
             }
         }
         return pks;

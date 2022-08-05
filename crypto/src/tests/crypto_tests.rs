@@ -127,9 +127,11 @@ fn verify_valid_multisig() {
     
     let (public_keys, sigs): (Vec<PublicKey>, Vec<Signature>) = signatures.iter().map(|(a,b)| (a.clone(),b.clone())).unzip();
     let asig = Signature::multisig_aggregate(&public_keys, &sigs).unwrap();
+    let apk = PublicKey::aggregate_public_keys(&public_keys);
 
     // Verify the batch.
     assert!(asig.multisig_verify(&public_keys, &digest).is_ok());
+    assert!(asig.verify(&digest, &apk).is_ok());
 }
 
 #[test]
@@ -177,6 +179,20 @@ fn multisig_aggregate_pks() {
 
     let apk = PublicKey::aggregate_public_keys(&pks);
     assert!(apk.encode_base64()=="rofYz5Bz1lkvoT6wtmkp+jjFuejiKTT9/te1Z+nG4Jn6ZBRb560QKc7mNHM2f8JV");
+}
+
+#[test]
+fn test_pk_sub() {
+    let pk1 = PublicKey::decode_base64(&"qUWMTJd6KYCvUkkwM4tbaNd5O1/xBoEiJUYK3B5zFZZGC/+U9W8lkJQJAZzoVXyx").unwrap();
+    let pk2 = PublicKey::decode_base64(&"iyAaB4DOmqk6JdOIv15FGWZKnHDp/nGowrI2yR3mYcte4J1w3xeaVOLWmE3QIbvI").unwrap();
+    let pk3 = PublicKey::decode_base64(&"qRALZZDwJM3dJsiFErD6zRQGoWTRxeFhIJ/PZaZPMI+DQWG3WxR/oOTjVmXhEy5q").unwrap();
+    let pk4 = PublicKey::decode_base64(&"sq3cx16Bv8TMQkhgADbz595uAMapjiNEvP6q6iQ98Thrj4t/zjeA0PEIYJLq7njn").unwrap();
+    let pks = vec![pk1,pk2,pk3,pk4];
+
+    let apk = PublicKey::aggregate_public_keys(&pks);
+    let pk123 = apk.batch_sub(&vec![pk4]);
+    let apk123 = PublicKey::aggregate_public_keys(&vec![pk1,pk2,pk3]);
+    assert!(apk123.encode_base64()==pk123.encode_base64());
 }
 
 #[tokio::test]

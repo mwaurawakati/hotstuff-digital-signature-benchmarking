@@ -124,7 +124,7 @@ impl PublicKey {
 
     pub fn sub(&self, other_pk: &PublicKey) -> Self {
         let this_pk = G1Affine::from_compressed(&self.0).unwrap();
-        let result: G1Projective = G1Projective::from(&this_pk) - G1Affine::from_compressed(&other_pk.0).unwrap();
+        let result: G1Projective = G1Projective::from(&this_pk) - (G1Affine::from_compressed(&other_pk.0).unwrap() * other_pk.hash_to_scalar());
         return PublicKey(bls_PublicKey::from(result).as_bytes()[..].try_into().expect("Unexpected public key length"));
     }
 
