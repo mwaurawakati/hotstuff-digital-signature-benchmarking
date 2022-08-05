@@ -125,13 +125,18 @@ fn verify_valid_multisig() {
         })
         .collect();
     
-    let (public_keys, sigs): (Vec<PublicKey>, Vec<Signature>) = signatures.iter().map(|(a,b)| (a.clone(),b.clone())).unzip();
+    let (mut public_keys, mut sigs): (Vec<PublicKey>, Vec<Signature>) = signatures.iter().map(|(a,b)| (a.clone(),b.clone())).unzip();
     let asig = Signature::multisig_aggregate(&public_keys, &sigs).unwrap();
     let apk = PublicKey::aggregate_public_keys(&public_keys);
 
     // Verify the batch.
     assert!(asig.multisig_verify(&public_keys, &digest).is_ok());
     assert!(asig.verify(&digest, &apk).is_ok());
+
+    let apk12 = apk.sub(&public_keys.pop().unwrap());
+    sigs.pop();
+    let asig12 = Signature::multisig_aggregate(&public_keys, &sigs).unwrap();
+    assert!(asig12.verify(&digest, &apk12).is_ok());
 }
 
 #[test]
@@ -192,7 +197,9 @@ fn test_pk_sub() {
     let apk = PublicKey::aggregate_public_keys(&pks);
     let pk123 = apk.batch_sub(&vec![pk4]);
     let apk123 = PublicKey::aggregate_public_keys(&vec![pk1,pk2,pk3]);
+    let apk321 = PublicKey::aggregate_public_keys(&vec![pk3,pk2,pk1]);
     assert!(apk123.encode_base64()==pk123.encode_base64());
+    assert!(apk123.encode_base64()==apk321.encode_base64());
 }
 
 #[tokio::test]

@@ -14,18 +14,14 @@ pub struct Aggregator {
     committee: Committee,
     votes_aggregators: HashMap<Round, HashMap<Digest, Box<QCMaker>>>,
     timeouts_aggregators: HashMap<Round, Box<TCMaker>>,
-    apk: PublicKey,
 }
 
 impl Aggregator {
     pub fn new(committee: Committee) -> Self {
-        let pks = committee.all_public_keys();
-        let apk = PublicKey::aggregate_public_keys(&pks);
         Self {
             committee,
             votes_aggregators: HashMap::new(),
-            timeouts_aggregators: HashMap::new(), 
-            apk,
+            timeouts_aggregators: HashMap::new(),
         }
     }
 
@@ -34,12 +30,11 @@ impl Aggregator {
         // with different round numbers or different digests.
 
         // Add the new vote to our aggregator and see if we have a QC.
-        let apk = self.apk.clone();
         self.votes_aggregators
             .entry(vote.round)
             .or_insert_with(HashMap::new)
             .entry(vote.digest())
-            .or_insert_with(|| Box::new(QCMaker::new(&apk)))
+            .or_insert_with(|| Box::new(QCMaker::new()))
             .append(vote, &self.committee)
     }
 
@@ -64,16 +59,14 @@ struct QCMaker {
     weight: Stake,
     votes: Vec<(PublicKey, Signature)>,
     used: HashSet<PublicKey>,
-    apk: PublicKey,
 }
 
 impl QCMaker {
-    pub fn new(apk: &PublicKey) -> Self {
+    pub fn new() -> Self {
         Self {
             weight: 0,
             votes: Vec::new(),
             used: HashSet::new(),
-            apk: *apk,
         }
     }
 
@@ -86,20 +79,18 @@ impl QCMaker {
             self.used.insert(author),
             ConsensusError::AuthorityReuse(author)
         );
-
         self.votes.push((author, vote.signature));
         self.weight += committee.stake(&author);
         if self.weight >= committee.quorum_threshold() {
             self.weight = 0; // Ensures QC is only made once.
             let (public_keys, signatures): (Vec<PublicKey>, Vec<Signature>) = self.votes.iter().map(|(a,b)| (a.clone(),b.clone())).unzip();
-            let aggregated_sig = Signature::multisig_aggregate(&public_keys, &signatures).unwrap();
+            let asig = Signature::multisig_aggregate(&public_keys, &signatures).unwrap();
             let votes = committee.public_keys_to_binary_repr(&public_keys);
             return Ok(Some(QC {
                 hash: vote.hash.clone(),
                 round: vote.round,
                 votes: votes,
-                signature: aggregated_sig,
-                apk: self.apk,
+                signature: asig,
             }));
         }
         Ok(None)

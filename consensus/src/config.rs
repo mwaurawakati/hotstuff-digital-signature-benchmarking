@@ -3,7 +3,9 @@ use log::info;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::convert::TryInto;
 
+pub type Index = u32;
 pub type Stake = u32;
 pub type EpochNumber = u128;
 
@@ -32,6 +34,7 @@ impl Parameters {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Authority {
+    pub index: Index,
     pub stake: Stake,
     pub address: SocketAddr,
 }
@@ -43,12 +46,12 @@ pub struct Committee {
 }
 
 impl Committee {
-    pub fn new(info: Vec<(PublicKey, Stake, SocketAddr)>, epoch: EpochNumber) -> Self {
+    pub fn new(info: Vec<(PublicKey, Index, Stake, SocketAddr)>, epoch: EpochNumber) -> Self {
         Self {
             authorities: info
                 .into_iter()
-                .map(|(name, stake, address)| {
-                    let authority = Authority { stake, address };
+                .map(|(name, index, stake, address)| {
+                    let authority = Authority { index, stake, address };
                     (name, authority)
                 })
                 .collect(),
@@ -90,29 +93,22 @@ impl Committee {
             .collect()
     }
 
-    pub fn index(&self, name: &PublicKey) -> Option<usize> {
-        self.authorities.keys().position(|pk| pk==name)
-    }
-
-    // pub fn public_key_by_index(&self, index: u32) -> PublicKey {
-    //     self.authorities
-    // }
-
     pub fn public_keys_to_binary_repr(&self, pks: &Vec<PublicKey>) -> Vec<bool> {
         let mut binary = vec![false; self.authorities.len()];
         for pk in pks{
-            let i = self.index(&pk).unwrap();
+            let i: usize = self.authorities.get(pk).unwrap().index.try_into().unwrap();
             binary[i] = true;
         }
         return binary;
     }
 
     pub fn binary_repr_to_public_keys(&self, binary_repr: &Vec<bool>) -> Vec<PublicKey> {
-        let keys = self.authorities.keys();
+        let keys: HashMap<Index, PublicKey> = self.authorities.keys().into_iter().map(|pk| (self.authorities.get(pk).unwrap().index, pk.clone())).collect();
         let mut pks: Vec<PublicKey> = Vec::new();
         for i in 0..binary_repr.len(){
             if binary_repr[i] == true {
-                pks.push(*keys.clone().nth(i).unwrap());
+                let index = i.try_into().unwrap(); 
+                pks.push(*keys.get(&index).unwrap());
             }
         }
         return pks;

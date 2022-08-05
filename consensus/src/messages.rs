@@ -167,7 +167,6 @@ pub struct QC {
     pub round: Round,
     pub votes: Vec<bool>,
     pub signature: Signature,
-    pub apk: PublicKey,
 }
 
 impl QC {
@@ -197,10 +196,7 @@ impl QC {
         );
 
         // Check the signatures.
-        let neg_votes = self.votes.iter().map(|vote| !vote).collect();
-        let neg_pks = committee.binary_repr_to_public_keys(&neg_votes);
-        let apk = self.apk.batch_sub(&neg_pks);
-        self.signature.verify(&self.digest(), &apk).map_err(ConsensusError::from)
+        self.signature.multisig_verify(&pks, &self.digest()).map_err(ConsensusError::from)
     }
 }
 

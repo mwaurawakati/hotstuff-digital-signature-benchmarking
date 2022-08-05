@@ -109,6 +109,7 @@ fn deploy_testbed(nodes: usize) -> Result<Vec<JoinHandle<()>>, Box<dyn std::erro
             .collect(),
         epoch,
     );
+    let mut index = 0;
     let consensus_committee = ConsensusCommittee::new(
         keys.iter()
             .enumerate()
@@ -116,7 +117,8 @@ fn deploy_testbed(nodes: usize) -> Result<Vec<JoinHandle<()>>, Box<dyn std::erro
                 let name = key.name;
                 let stake = 1;
                 let addresses = format!("127.0.0.1:{}", 25_200 + i).parse().unwrap();
-                (name, stake, addresses)
+                index += 1;
+                (name, index-1, stake, addresses)
             })
             .collect(),
         epoch,
