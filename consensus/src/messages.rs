@@ -181,13 +181,10 @@ impl QC {
     pub fn verify(&self, committee: &Committee) -> ConsensusResult<()> {
         // Ensure the QC has a quorum.
         let mut weight = 0;
-        let mut used = HashSet::new();
         let pks = committee.binary_repr_to_public_keys(&self.votes);
         for name in pks.iter() {
-            ensure!(!used.contains(name), ConsensusError::AuthorityReuse(*name));
             let voting_rights = committee.stake(name);
             ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
-            used.insert(*name);
             weight += voting_rights;
         }
         ensure!(
@@ -196,7 +193,11 @@ impl QC {
         );
 
         // Check the signatures.
-        self.signature.multisig_verify(&pks, &self.digest()).map_err(ConsensusError::from)
+        // let neg_votes = self.votes.iter().map(|vote| !vote).collect();
+        // let neg_pks = committee.binary_repr_to_public_keys(&neg_votes);
+        // let apk = committee.get_apk().batch_sub(&neg_pks);
+        let apk = PublicKey::aggregate_public_keys(&pks);
+        self.signature.verify(&self.digest(), &apk).map_err(ConsensusError::from)
     }
 }
 

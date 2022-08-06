@@ -32,6 +32,8 @@ impl Parameters {
     }
 }
 
+static mut APK: Option<PublicKey> = None;
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Authority {
     pub index: Index,
@@ -47,7 +49,7 @@ pub struct Committee {
 
 impl Committee {
     pub fn new(info: Vec<(PublicKey, Index, Stake, SocketAddr)>, epoch: EpochNumber) -> Self {
-        Self {
+        let c = Self {
             authorities: info
                 .into_iter()
                 .map(|(name, index, stake, address)| {
@@ -56,6 +58,23 @@ impl Committee {
                 })
                 .collect(),
             epoch,
+        };
+        c.update_apk();
+        return c;
+    }
+
+    fn update_apk(&self) {
+        unsafe{
+            APK = Some(PublicKey::aggregate_public_keys(&self.authorities.keys().cloned().collect()));
+        }
+    }
+
+    pub fn get_apk(&self) -> PublicKey {
+        unsafe{
+            if APK == None {
+                self.update_apk();
+            }
+            return APK.unwrap();
         }
     }
 
