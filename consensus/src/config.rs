@@ -3,6 +3,7 @@ use log::info;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::convert::TryInto;
 
 pub type Index = u32;
 pub type Stake = u32;
@@ -63,8 +64,10 @@ impl Committee {
     }
 
     fn update_apk(&self) {
+        let pks: Vec<PublicKey> = self.authorities.keys().cloned().collect();
+        let pks_with_index: Vec<(PublicKey, u32)> = pks.iter().map(|pk| (*pk, self.get_index(pk))).collect();
         unsafe{
-            APK = Some(PublicKey::aggregate_public_keys(&self.authorities.keys().cloned().collect()));
+            APK = Some(PublicKey::aggregate_public_keys(&pks_with_index));
         }
     }
 
@@ -75,6 +78,11 @@ impl Committee {
             }
             return APK.unwrap();
         }
+    }
+
+    pub fn get_index(&self, pk: &PublicKey) -> u32 {
+        let i: u32 = self.authorities.get(pk).unwrap().index.try_into().unwrap();
+        return i;
     }
 
     pub fn size(&self) -> usize {

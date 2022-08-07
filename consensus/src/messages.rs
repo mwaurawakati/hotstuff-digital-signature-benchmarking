@@ -196,7 +196,8 @@ impl QC {
         );
 
         // Check the signatures.
-        self.signature.multisig_verify(&self.votes, &self.digest()).map_err(ConsensusError::from)
+        let apk = committee.get_apk();
+        self.signature.verify(&self.digest(), &apk).map_err(ConsensusError::from)
     }
 }
 

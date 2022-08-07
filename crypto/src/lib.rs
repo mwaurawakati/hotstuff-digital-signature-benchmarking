@@ -14,7 +14,7 @@ use bls_signatures::aggregate as bls_aggregate;
 use bls_signatures::verify as bls_verify;
 use bls_signatures::hash as bls_hash;
 use bls_signatures::Error;
-use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
+use bls12_381::{G1Affine, G2Affine, Scalar};
 use sha2::Digest as sha2_digest;
 use sha2::Sha256;
 
@@ -107,18 +107,14 @@ impl PublicKey {
         return Scalar::from_bytes(&le_hash).unwrap();
     }
 
-    pub fn aggregate_public_keys(public_keys: &Vec<PublicKey>) -> Self {
-        let mut t = Vec::new();
-        for pk in public_keys {
-            t.push(pk.hash_to_scalar());
+    pub fn aggregate_public_keys(public_keys: &Vec<(PublicKey, u32)>) -> Self {
+        let (pks, indexes): (Vec<PublicKey>, Vec<u32>) = public_keys.iter().map(|(pk, i)| (pk, (*i))).unzip();
+        let l = lagrange_basis(&indexes);
+        let mut apk = G1Affine::from_compressed(&pks[0].0).unwrap() * l[0];
+        for i in 1..pks.len() {
+            apk += G1Affine::from_compressed(&pks[i].0).unwrap() * l[i];
         }
-        let mut aggregated_pk = G1Projective::identity();
-        for i in 0..t.len(){
-            let g1point = G1Affine::from_compressed(&public_keys[i].0).unwrap();
-            aggregated_pk += g1point * t[i];
-        }
-        let apk = PublicKey(bls_PublicKey::from(aggregated_pk).as_bytes()[..].try_into().expect("Unexpected public key length"));
-        return apk;
+        return PublicKey(G1Affine::from(apk).to_compressed());
     }
 }
 
@@ -305,35 +301,17 @@ impl Signature {
         Signature { part1, part2 }
     }
 
-    pub fn multisig_aggregate(public_keys: &Vec<PublicKey>, signatures: &Vec<Signature>) -> Result<Self, CryptoError> {
-        if public_keys.len() != signatures.len() {
-            return Err(Error::SizeMismatch);
+    pub fn thresholdsig_aggregate(signatures: &Vec<(Signature, u32)>) -> Self {
+        let (sigs, indexes): (Vec<&Signature>, Vec<u32>) = signatures.iter().map(|(sig, i)| (sig, i)).unzip();
+        let l = lagrange_basis(&indexes);
+        let mut asig = G2Affine::from_compressed(&sigs[0].flatten()).unwrap() * l[0];
+        for i in 1..sigs.len() {
+            asig += G2Affine::from_compressed(&sigs[i].flatten()).unwrap() * l[i];
         }
-        if signatures.len() == 0 {
-            return Err(Error::ZeroSizedInput);
-        }
-        let mut t = Vec::new();
-        for pk in public_keys {
-            t.push(pk.hash_to_scalar());
-        }
-        
-        let mut aggregated_sig = G2Projective::identity();
-        for i in 0..t.len(){
-            let g2point = G2Affine::from_compressed(&signatures[i].flatten()).unwrap();
-            aggregated_sig += g2point * t[i];
-        }
-        let sig = bls_Signature::from(aggregated_sig).as_bytes();
-        let part1 = sig[..48].try_into().expect("Unexpected signature length");
-        let part2 = sig[48..96].try_into().expect("Unexpected signature length");
-        return Ok(Signature { part1, part2 })
-    }
-
-    pub fn multisig_verify(&self, public_keys: &Vec<PublicKey>, digest: &Digest) -> Result<(), CryptoError> {
-        if public_keys.len() == 0 {
-            return Err(Error::ZeroSizedInput)
-        }
-        let apk = PublicKey::aggregate_public_keys(public_keys);
-        return self.verify(digest, &apk)
+        let bytes = G2Affine::from(asig).to_compressed();
+        let part1 = bytes[..48].try_into().expect("Unexpected signature length");
+        let part2 = bytes[48..96].try_into().expect("Unexpected signature length");
+        Signature { part1, part2 }
     }
 
     pub fn encode_base64(&self) -> String {
@@ -425,6 +403,7 @@ pub fn threshold_key_gen(k: u32, n: u32) -> Vec<(PublicKey, SecretKey)> {
 }
 
 fn poly_eval(v: &Vec<SecretKey>, index: usize) -> SecretKey{
+    // Rewrite from https://github.com/asonnino/bls/blob/master/bls/utils.py
     let mut sum = Scalar::from_bytes(&v[0].0).unwrap();
     for i in 1..v.len() {
         let x: u64 = index.pow(i.try_into().unwrap()).try_into().unwrap();
@@ -433,4 +412,23 @@ fn poly_eval(v: &Vec<SecretKey>, index: usize) -> SecretKey{
     let sk_bytes = bls_PrivateKey::from(sum).as_bytes();
     let sk = SecretKey(sk_bytes[..32].try_into().expect("Unexpected secret length"));
     return sk;
+}
+
+fn lagrange_basis(indexes: &Vec<u32>) -> Vec<Scalar>{
+    // Rewrite from https://github.com/asonnino/bls/blob/master/bls/utils.py
+    let mut l = Vec::new();
+    for i in indexes.iter(){
+        let mut numerator = Scalar::from(1);
+        let mut denominator = Scalar::from(1);
+        for j in indexes.iter() {
+            if *j != 1 {
+                let a: u64 = (*j).try_into().unwrap();
+                numerator *= -Scalar::from(a);
+                let b: u64 = (i-j).try_into().unwrap();
+                denominator *= Scalar::from(b);
+            }
+            l.push(numerator * denominator.invert().unwrap());
+        }
+    }   
+    return l;
 }
