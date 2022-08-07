@@ -32,6 +32,10 @@ class PathMaker:
         return f'.node-{i}.json'
 
     @staticmethod
+    def key_file_general_name():
+        return f'.node'
+
+    @staticmethod
     def db_path(i):
         assert isinstance(i, int) and i >= 0
         return f'.db-{i}'

@@ -25,6 +25,11 @@ class CommandMaker:
         return f'./node keys --filename {filename}'
 
     @staticmethod
+    def ttp_key_gen(k, n, filename):
+        assert isinstance(filename, str)
+        return f'./node ttp_key_gen --k {k} --n {n} --filename {filename}'
+
+    @staticmethod
     def run_node(keys, committee, store, parameters, debug=False):
         assert isinstance(keys, str)
         assert isinstance(committee, str)

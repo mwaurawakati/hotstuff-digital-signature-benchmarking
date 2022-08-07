@@ -2,10 +2,6 @@ import subprocess
 from math import ceil
 from os.path import basename, splitext
 from time import sleep
-from bplib.bp import BpGroup, G2Elem
-from petlib.bn import Bn
-import json
-import base64
 
 from benchmark.commands import CommandMaker
 from benchmark.config import Key, LocalCommittee, NodeParameters, BenchParameters, ConfigError
@@ -31,28 +27,12 @@ class LocalBench:
         cmd = f'{command} 2> {log_file}'
         subprocess.run(['tmux', 'new', '-d', '-s', name, cmd], check=True)
 
-    def poly_eval(self, coeff, x):
-        # From https://github.com/asonnino/bls/blob/master/bls/util.py
-        return sum([coeff[i] * (Bn(x) ** i) for i in range(len(coeff))])
-
     def _kill_nodes(self):
         try:
             cmd = CommandMaker.kill().split()
             subprocess.run(cmd, stderr=subprocess.DEVNULL)
         except subprocess.SubprocessError as e:
             raise BenchError('Failed to kill testbed', e)
-
-    def key_gen(self, t, n):
-        # From https://github.com/asonnino/bls/blob/master/bls/scheme.py
-        G = BpGroup()
-        (g1, g2) = G.gen1(), G.gen2()
-        (e, o) = G.pair, G.order()
-        v = [o.random() for _ in range(0,t)]
-        # generate shares
-        sk = [self.poly_eval(v,i) % o for i in range(1,n+1)]
-        # set keys
-        vk = [xi*g1 for xi in sk]
-        return (sk, vk)
 
     def run(self, debug=False):
         assert isinstance(debug, bool)
@@ -79,18 +59,17 @@ class LocalBench:
             subprocess.run([cmd], shell=True)
 
             # Generate configuration files.
-            # Generate threshold keys
-            t = int(nodes*2/3 + 1)
-            sks, vks = self.key_gen(t, nodes)
-            sks = [base64.b64encode(sk.hex().encode('utf-8')).decode("utf-8") for sk in sks]
-            vks = [base64.b64encode(vk.export()).decode("utf-8") for vk in vks]
-            keys = [{"name": sks[i], "secret": vks[i]} for i in range(nodes)]
-            key_files = [PathMaker.key_file(i) for i in range(nodes)]
-            for i in range(nodes):
-                with open(key_files[i], 'w') as f:
-                    f.write(json.dumps(keys[i]))
+            k = int(nodes*2/3 + 1)
+            filename = PathMaker.key_file_general_name()
+            cmd = CommandMaker.ttp_key_gen(k, nodes, filename).split()
+            subprocess.run(cmd, check=True)
 
-            names = [x["name"] for x in keys]
+            keys = []
+            key_files = [PathMaker.key_file(i) for i in range(nodes)]
+            for filename in key_files:
+                keys += [Key.from_file(filename)]
+
+            names = [x.name for x in keys]
             committee = LocalCommittee(names, self.BASE_PORT)
             committee.print(PathMaker.committee_file())
 
