@@ -90,7 +90,6 @@ impl QCMaker {
                 hash: vote.hash.clone(),
                 round: vote.round,
                 votes: public_keys,
-                // votes: self.votes.clone(),
                 signature: aggregated_sig,
             }));
         }

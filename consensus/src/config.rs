@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
+pub type Index = u32;
 pub type Stake = u32;
 pub type EpochNumber = u128;
 
@@ -30,8 +31,11 @@ impl Parameters {
     }
 }
 
+static mut APK: Option<PublicKey> = None;
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Authority {
+    pub index: Index,
     pub stake: Stake,
     pub address: SocketAddr,
 }
@@ -43,16 +47,33 @@ pub struct Committee {
 }
 
 impl Committee {
-    pub fn new(info: Vec<(PublicKey, Stake, SocketAddr)>, epoch: EpochNumber) -> Self {
-        Self {
+    pub fn new(info: Vec<(PublicKey, Index, Stake, SocketAddr)>, epoch: EpochNumber) -> Self {
+        let c = Self {
             authorities: info
                 .into_iter()
-                .map(|(name, stake, address)| {
-                    let authority = Authority { stake, address };
+                .map(|(name, index, stake, address)| {
+                    let authority = Authority { index, stake, address };
                     (name, authority)
                 })
                 .collect(),
             epoch,
+        };
+        c.update_apk();
+        return c;
+    }
+
+    fn update_apk(&self) {
+        unsafe{
+            APK = Some(PublicKey::aggregate_public_keys(&self.authorities.keys().cloned().collect()));
+        }
+    }
+
+    pub fn get_apk(&self) -> PublicKey {
+        unsafe{
+            if APK == None {
+                self.update_apk();
+            }
+            return APK.unwrap();
         }
     }
 
