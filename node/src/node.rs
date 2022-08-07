@@ -1,7 +1,7 @@
 use crate::config::Export as _;
 use crate::config::{Committee, ConfigError, Parameters, Secret};
 use consensus::{Block, Consensus};
-use crypto::SignatureService;
+use crypto::{SignatureService, PublicKey, SecretKey};
 use log::info;
 use mempool::Mempool;
 use store::Store;
@@ -71,6 +71,10 @@ impl Node {
 
     pub fn print_key_file(filename: &str) -> Result<(), ConfigError> {
         Secret::new().write(filename)
+    }
+
+    pub fn write_to_file(name: PublicKey, secret: SecretKey, filename: &str) -> Result<(), ConfigError> {
+        Secret::from(name, secret).write(filename)
     }
 
     pub async fn analyze_block(&mut self) {

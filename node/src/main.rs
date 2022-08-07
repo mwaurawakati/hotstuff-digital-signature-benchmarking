@@ -6,10 +6,12 @@ use crate::config::{Committee, Secret};
 use crate::node::Node;
 use clap::{crate_name, crate_version, App, AppSettings, SubCommand};
 use consensus::Committee as ConsensusCommittee;
+use crypto::SecretKey;
 use env_logger::Env;
 use futures::future::join_all;
 use log::error;
 use mempool::Committee as MempoolCommittee;
+use crypto::threshold_key_gen;
 use std::fs;
 use tokio::task::JoinHandle;
 
@@ -37,6 +39,13 @@ async fn main() {
                 .about("Deploys a network of nodes locally")
                 .args_from_usage("--nodes=<INT> 'The number of nodes to deploy'"),
         )
+        .subcommand(
+            SubCommand::with_name("ttp_key_gen")
+                .about("Excecuted by a trusted third party, generate n keys with the threshold k <= n")
+                .args_from_usage("--k=<INT> 'The threshold'")
+                .args_from_usage("--n=<INT> 'The number of keys'")
+                .args_from_usage("--filename=<FILE> 'The file where to print the new key pair, an index will be appended to the file names'"),
+        )
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .get_matches();
 
@@ -57,6 +66,23 @@ async fn main() {
             let filename = subm.value_of("filename").unwrap();
             if let Err(e) = Node::print_key_file(filename) {
                 error!("{}", e);
+            }
+        }
+        ("ttp_key_gen", Some(subm)) => {
+            let k: u32 = subm.value_of("k").unwrap().parse().unwrap();
+            let n: u32 = subm.value_of("n").unwrap().parse().unwrap();
+            let filename = subm.value_of("filename").unwrap();
+            let keys = threshold_key_gen(k, n);
+            let mut i = 0u32;
+            for key in keys.iter() {
+                let (name, secret) = key;
+                let suffix = format!("-{}.json", i.to_string());
+                let mut this_filename = filename.to_string();
+                this_filename.push_str(&suffix);
+                if let Err(e) = Node::write_to_file(*name, SecretKey::decode_base64(&secret.encode_base64()).unwrap(), &this_filename) {
+                    error!("{}", e);
+                }
+                i += 1;
             }
         }
         ("run", Some(subm)) => {

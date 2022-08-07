@@ -64,6 +64,10 @@ impl Secret {
         let (name, secret) = generate_production_keypair();
         Self { name, secret }
     }
+
+    pub fn from(name: PublicKey, secret: SecretKey) -> Self {
+        Self { name, secret }
+    }
 }
 
 impl Export for Secret {}

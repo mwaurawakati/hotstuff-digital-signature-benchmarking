@@ -182,6 +182,12 @@ impl SecretKey {
             .map_err(|_| base64::DecodeError::InvalidLength)?;
         Ok(Self(array))
     }
+
+    pub fn public_key(&self) -> PublicKey {
+        let sk = bls_PrivateKey::from_bytes(&self.0).unwrap();
+        let vk = sk.public_key().as_bytes();
+        PublicKey(vk[..48].try_into().expect("Unexpected public length"))
+    }
 }
 
 impl Serialize for SecretKey {
@@ -399,4 +405,32 @@ impl SignatureService {
             .await
             .expect("Failed to receive signature from Signature Service")
     }
+}
+
+pub fn threshold_key_gen(k: u32, n: u32) -> Vec<(PublicKey, SecretKey)> {
+    let mut v = Vec::new();
+    for _ in 0..k {
+        let (_vk, sk) = generate_production_keypair();
+        v.push(sk);
+    }
+
+    let mut sks = Vec::new();
+    for i in 1..n+1 {
+        let sk = poly_eval(&v, i.try_into().unwrap());
+        sks.push(sk);
+    }
+
+    let keys = sks.iter().map(|sk| (sk.public_key(), SecretKey::decode_base64(&sk.encode_base64()).unwrap())).collect();
+    return keys;
+}
+
+fn poly_eval(v: &Vec<SecretKey>, index: usize) -> SecretKey{
+    let mut sum = Scalar::from_bytes(&v[0].0).unwrap();
+    for i in 1..v.len() {
+        let x: u64 = index.pow(i.try_into().unwrap()).try_into().unwrap();
+        sum += Scalar::from_bytes(&v[i].0).unwrap() * Scalar::from(x);
+    }
+    let sk_bytes = bls_PrivateKey::from(sum).as_bytes();
+    let sk = SecretKey(sk_bytes[..32].try_into().expect("Unexpected secret length"));
+    return sk;
 }
