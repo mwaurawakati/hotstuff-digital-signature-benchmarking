@@ -414,21 +414,23 @@ fn poly_eval(v: &Vec<SecretKey>, index: usize) -> SecretKey{
     return sk;
 }
 
-fn lagrange_basis(indexes: &Vec<u32>) -> Vec<Scalar>{
+pub fn lagrange_basis(indexes: &Vec<u32>) -> Vec<Scalar>{
     // Rewrite from https://github.com/asonnino/bls/blob/master/bls/utils.py
     let mut l = Vec::new();
     for i in indexes.iter(){
         let mut numerator = Scalar::from(1);
         let mut denominator = Scalar::from(1);
         for j in indexes.iter() {
-            if *j != 1 {
-                let a: u64 = (*j).try_into().unwrap();
-                numerator *= -Scalar::from(a);
-                let b: u64 = (i-j).try_into().unwrap();
-                denominator *= Scalar::from(b);
+            if *j != *i {
+                let iu64: u64 = (*i).try_into().unwrap();
+                let ju64: u64 = (*j).try_into().unwrap();
+                let i_scalar = Scalar::from(iu64);
+                let j_scalar = Scalar::from(ju64);
+                numerator *= -j_scalar;
+                denominator *= i_scalar - j_scalar;
             }
-            l.push(numerator * denominator.invert().unwrap());
         }
+        l.push(numerator * denominator.invert().unwrap());
     }   
     return l;
 }
