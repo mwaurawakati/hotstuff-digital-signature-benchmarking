@@ -166,8 +166,8 @@ impl fmt::Debug for Vote {
 pub struct QC {
     pub hash: Digest,
     pub round: Round,
-    pub votes: Vec<PublicKey>,
-    pub signature: Signature,
+    pub votes: Vec<(PublicKey, Signature)>,
+    // pub signature: Signature,
 }
 
 impl QC {
@@ -183,7 +183,7 @@ impl QC {
         // Ensure the QC has a quorum.
         let mut weight = 0;
         let mut used = HashSet::new();
-        for name in self.votes.iter() {
+        for (name, _) in self.votes.iter() {
             ensure!(!used.contains(name), ConsensusError::AuthorityReuse(*name));
             let voting_rights = committee.stake(name);
             ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
@@ -196,7 +196,7 @@ impl QC {
         );
 
         // Check the signatures.
-        self.signature.multisig_verify(&self.votes, &self.digest()).map_err(ConsensusError::from)
+        Signature::verify_batch(&self.digest(), &self.votes).map_err(ConsensusError::from)
     }
 }
 
