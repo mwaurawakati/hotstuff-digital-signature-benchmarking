@@ -33,6 +33,7 @@ impl Parameters {
 }
 
 static mut APK: Option<PublicKey> = None;
+// static mut index_pk_map: HashMap<Index, PublicKey> = HashMap::default();
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Authority {
@@ -45,19 +46,21 @@ pub struct Authority {
 pub struct Committee {
     pub authorities: HashMap<PublicKey, Authority>,
     pub epoch: EpochNumber,
+    pub index_pk_map: HashMap<Index, PublicKey>,
 }
 
 impl Committee {
     pub fn new(info: Vec<(PublicKey, Index, Stake, SocketAddr)>, epoch: EpochNumber) -> Self {
         let c = Self {
-            authorities: info
+            authorities: info.clone()
                 .into_iter()
                 .map(|(name, index, stake, address)| {
                     let authority = Authority { index, stake, address };
                     (name, authority)
                 })
                 .collect(),
-            epoch,
+            epoch: epoch,
+            index_pk_map: info.into_iter().map(|(name, index, _, _)| (index, name)).collect(),
         };
         c.update_apk();
         return c;
@@ -122,12 +125,11 @@ impl Committee {
     }
 
     pub fn binary_repr_to_public_keys(&self, binary_repr: &Vec<bool>) -> Vec<PublicKey> {
-        let keys: HashMap<Index, PublicKey> = self.authorities.keys().into_iter().map(|pk| (self.authorities.get(pk).unwrap().index, pk.clone())).collect();
         let mut pks: Vec<PublicKey> = Vec::new();
         for i in 0..binary_repr.len(){
             if binary_repr[i] == true {
                 let index = i.try_into().unwrap(); 
-                pks.push(*keys.get(&index).unwrap());
+                pks.push(*self.index_pk_map.get(&index).unwrap());
             }
         }
         return pks;

@@ -37,11 +37,13 @@ class Committee:
 
     def _build_consensus(self):
         node = {}
+        index_map = {}
         i = 0
         for a, n in zip(self.consensus, self.names):
             node[n] = {'index': i, 'name': n, 'stake': 1, 'address': a}
+            index_map[i] = n
             i += 1
-        return {'authorities': node, 'epoch': 1}
+        return {'authorities': node, 'epoch': 1, 'index_pk_map': index_map}
 
     def _build_mempool(self):
         node = {}

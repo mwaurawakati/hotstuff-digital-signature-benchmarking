@@ -193,10 +193,10 @@ impl QC {
         );
 
         // Check the signatures.
-        // let neg_votes = self.votes.iter().map(|vote| !vote).collect();
-        // let neg_pks = committee.binary_repr_to_public_keys(&neg_votes);
-        // let apk = committee.get_apk().batch_sub(&neg_pks);
-        let apk = PublicKey::aggregate_public_keys(&pks);
+        let neg_votes = self.votes.iter().map(|vote| !vote).collect();
+        let neg_pks = committee.binary_repr_to_public_keys(&neg_votes);
+        let apk = committee.get_apk().batch_sub(&neg_pks);
+        // let apk = PublicKey::aggregate_public_keys(&pks);
         self.signature.verify(&self.digest(), &apk).map_err(ConsensusError::from)
     }
 }
