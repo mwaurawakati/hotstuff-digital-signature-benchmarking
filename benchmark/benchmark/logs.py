@@ -7,6 +7,8 @@ from statistics import mean
 
 from benchmark.utils import Print
 
+SIGNATURE_LENGTH = 64
+PUBLICKEY_LENGTH = 32
 
 class ParseError(Exception):
     pass
@@ -151,7 +153,7 @@ class LogParser:
         duration = end - start
         bytes = sum(self.sizes.values())
         bps = bytes / duration
-        tps = bps / self.size[0]
+        tps = bytes / (self.size[0]+PUBLICKEY_LENGTH+SIGNATURE_LENGTH) / duration
         return tps, bps, duration
 
     def _consensus_latency(self):
@@ -165,7 +167,7 @@ class LogParser:
         duration = end - start
         bytes = sum(self.sizes.values())
         bps = bytes / duration
-        tps = bps / self.size[0]
+        tps = bytes / (self.size[0]+PUBLICKEY_LENGTH+SIGNATURE_LENGTH) / duration
         return tps, bps, duration
 
     def _end_to_end_latency(self):
@@ -221,6 +223,10 @@ class LogParser:
             f' End-to-end TPS: {round(end_to_end_tps):,} tx/s\n'
             f' End-to-end BPS: {round(end_to_end_bps):,} B/s\n'
             f' End-to-end latency: {round(end_to_end_latency):,} ms\n'
+            '\n'
+            f' Max transactions per block: {round(mempool_batch_size/(self.size[0]+PUBLICKEY_LENGTH+SIGNATURE_LENGTH))} tx/block\n'
+            f' Actual transactions per block: {round(mean(self.sizes.values())/(self.size[0]+PUBLICKEY_LENGTH+SIGNATURE_LENGTH), 2)} tx/block\n'
+            f' Blocks per second: {round(len(self.sizes)/duration) if duration>0 else 0} blocks/s\n'
             '-----------------------------------------\n'
         )
 
