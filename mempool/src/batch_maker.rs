@@ -72,6 +72,7 @@ impl BatchMaker {
     async fn run(&mut self) {
         let timer = sleep(Duration::from_millis(self.max_batch_delay));
         tokio::pin!(timer);
+        let mut signatures = Vec::new();
 
         loop {
             tokio::select! {
@@ -85,9 +86,13 @@ impl BatchMaker {
                     let signature = Signature::from_bytes(signature_bytes[..48].try_into().unwrap(), signature_bytes[48..96].try_into().unwrap());
                     let public_key = PublicKey(public_key_bytes.try_into().unwrap());
                     if signature.verify(&digest, &public_key).is_ok(){
-                        self.current_batch_size += transaction.len();
-                        self.current_batch.push(transaction);
-                        if self.current_batch_size >= self.batch_size {
+                        signatures.push(signature.clone());
+                        self.current_batch_size += transaction.len() - 96;
+                        self.current_batch.push(transaction[..transaction.len()-96].to_vec());
+                        if self.current_batch_size >= self.batch_size - 96 {
+                            let asig = Signature::aggregate_signatures(&signatures);
+                            self.current_batch.push(asig.flatten().to_vec());
+                            signatures.clear();
                             self.seal().await;
                             timer.as_mut().reset(Instant::now() + Duration::from_millis(self.max_batch_delay));
                         }
@@ -100,6 +105,9 @@ impl BatchMaker {
                 // If the timer triggers, seal the batch even if it contains few transactions.
                 () = &mut timer => {
                     if !self.current_batch.is_empty() {
+                        let asig = Signature::aggregate_signatures(&signatures);
+                        self.current_batch.push(asig.flatten().to_vec());
+                        signatures.clear();
                         self.seal().await;
                     }
                     timer.as_mut().reset(Instant::now() + Duration::from_millis(self.max_batch_delay));
