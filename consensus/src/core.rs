@@ -8,14 +8,17 @@ use crate::messages::{Block, Timeout, Vote, QC, TC};
 use crate::proposer::ProposerMessage;
 use crate::synchronizer::Synchronizer;
 use crate::timer::Timer;
+use mempool::mempool::MempoolMessage;
 use async_recursion::async_recursion;
 use bytes::Bytes;
 use crypto::Hash as _;
-use crypto::{PublicKey, SignatureService};
+use crypto::{PublicKey, SignatureService, Digest, Signature};
+use ed25519_dalek::{Digest as _, Sha512};
 use log::{debug, error, info, warn};
 use network::SimpleSender;
 use std::cmp::max;
 use std::collections::VecDeque;
+use std::convert::TryInto;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
 
@@ -112,6 +115,36 @@ impl Core {
         // Ensure we won't vote for contradicting blocks.
         self.increase_last_voted_round(block.round);
         // TODO [issue #15]: Write to storage preferred_round and last_voted_round.
+        if block.payload.len() > 0{
+            let digest = block.payload[0].to_vec();
+            match self.store.read(digest).await {
+                Ok(Some(data)) => {
+                    let deserialized: MempoolMessage = bincode::deserialize(&data[..]).expect("Failed to deserialized batch");
+                    match deserialized {
+                        MempoolMessage::Batch(batch) => {
+                            // Verify messages
+                            for transaction in &batch{
+                                let message = &transaction[..transaction.len()-96];
+                                let public_key_bytes = &transaction[transaction.len()-96..transaction.len()-64];
+                                let signature_bytes = &transaction[transaction.len()-64..];
+                                let digest = Digest(Sha512::digest(&message).as_slice()[..32].try_into().unwrap());
+                                let signature = Signature::from_bytes(signature_bytes[..32].try_into().unwrap(), signature_bytes[32..64].try_into().unwrap());
+                                let public_key = PublicKey(public_key_bytes.try_into().unwrap());
+                                if signature.verify(&digest, &public_key).is_err(){
+                                    return None;
+                                }
+                            }
+                        },
+                        _ => {
+                            warn!("Got batch requrest");
+                            return None;
+                        },
+                    }
+                },
+                Ok(None) => warn!("Block payload: None"),
+                Err(e) => error!("{}", e),
+            }
+        }
         Some(Vote::new(block, self.name, self.signature_service.clone()).await)
     }
 
