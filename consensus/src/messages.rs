@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::convert::TryInto;
 use std::fmt;
-use log::warn;
 
 #[cfg(test)]
 #[path = "tests/messages_tests.rs"]
