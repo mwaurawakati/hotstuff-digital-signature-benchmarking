@@ -1,7 +1,7 @@
 mod batch_maker;
 mod config;
 mod helper;
-mod mempool;
+pub mod mempool;
 mod processor;
 mod quorum_waiter;
 mod synchronizer;
