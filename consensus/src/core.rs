@@ -8,14 +8,17 @@ use crate::messages::{Block, Timeout, Vote, QC, TC};
 use crate::proposer::ProposerMessage;
 use crate::synchronizer::Synchronizer;
 use crate::timer::Timer;
+use mempool::mempool::MempoolMessage;
 use async_recursion::async_recursion;
 use bytes::Bytes;
 use crypto::Hash as _;
-use crypto::{PublicKey, SignatureService};
+use crypto::{PublicKey, SignatureService, Digest, Signature};
+use ed25519_dalek::{Digest as _, Sha512};
 use log::{debug, error, info, warn};
 use network::SimpleSender;
 use std::cmp::max;
 use std::collections::VecDeque;
+use std::convert::TryInto;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
 
@@ -107,6 +110,41 @@ impl Core {
         }
         if !(safety_rule_1 && safety_rule_2) {
             return None;
+        }
+
+        if block.payload.len() > 0{
+            let digest = block.payload[0].to_vec();
+            match self.store.read(digest).await {
+                Ok(Some(data)) => {
+                    let deserialized: MempoolMessage = bincode::deserialize(&data[..]).expect("Failed to deserialized batch");
+                    match deserialized {
+                        MempoolMessage::Batch(mut batch) => {
+                            // Verify messages
+                            let asig_bytes = batch.pop().unwrap();
+                            let asig = Signature::from_bytes(asig_bytes[..48].try_into().unwrap(), asig_bytes[48..].try_into().unwrap());
+                            let mut digests = Vec::new();
+                            let mut public_keys = Vec::new();
+                            for transaction in &batch{
+                                let message = &transaction[..transaction.len()-48];
+                                let public_key_bytes = &transaction[transaction.len()-48..];
+                                let digest = Digest(Sha512::digest(&message).as_slice()[..32].try_into().unwrap());
+                                let public_key = PublicKey(public_key_bytes.try_into().unwrap());
+                                digests.push(digest);
+                                public_keys.push(public_key);
+                            }
+                            if asig.verify_aggregated_signature(&digests, &public_keys).is_err(){
+                                return None;
+                            }
+                        },
+                        _ => {
+                            warn!("Got batch requrest");
+                            return None;
+                        },
+                    }
+                },
+                Ok(None) => warn!("Block payload: None"),
+                Err(e) => error!("{}", e),
+            }
         }
 
         // Ensure we won't vote for contradicting blocks.
