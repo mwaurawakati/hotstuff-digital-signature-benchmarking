@@ -112,8 +112,6 @@ impl Core {
             return None;
         }
 
-        // Ensure we won't vote for contradicting blocks.
-        self.increase_last_voted_round(block.round);
         // TODO [issue #15]: Write to storage preferred_round and last_voted_round.
         if block.payload.len() > 0{
             let digest = block.payload[0].to_vec();
@@ -145,6 +143,8 @@ impl Core {
                 Err(e) => error!("{}", e),
             }
         }
+        // Ensure we won't vote for contradicting blocks.
+        self.increase_last_voted_round(block.round);
         Some(Vote::new(block, self.name, self.signature_service.clone()).await)
     }
 
