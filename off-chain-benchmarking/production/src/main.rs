@@ -57,7 +57,7 @@ pub fn measure_multiple_different_messages() {
         
         time.push((num_of_msg, eddsa_duration_sum/NUM_OF_ITERATION, bls_duration_sum/NUM_OF_ITERATION));
 
-        num_of_msg *= 2;
+        num_of_msg += 64;
     }
 
     println!("{:?}", time);
