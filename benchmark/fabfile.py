@@ -16,7 +16,7 @@ def local(ctx):
         'nodes': 4,
         'rate': 1_000,
         'tx_size': 512,
-        'duration': 600,
+        'duration': 20,
     }
     node_params = {
         'consensus': {
@@ -97,11 +97,11 @@ def remote(ctx):
     ''' Run benchmarks on AWS '''
     bench_params = {
         'faults': 0,
-        'nodes': [10, 20],
-        'rate': [10_000, 30_000],
+        'nodes': [4],
+        'rate': [15_000],
         'tx_size': 512,
         'duration': 300,
-        'runs': 5,
+        'runs': 3,
     }
     node_params = {
         'consensus': {

@@ -8,13 +8,15 @@ use clap::{crate_name, crate_version, App, AppSettings, SubCommand};
 use consensus::Committee as ConsensusCommittee;
 use env_logger::Env;
 use futures::future::join_all;
-use log::error;
+use log::{error, info};
 use mempool::Committee as MempoolCommittee;
 use std::fs;
 use tokio::task::JoinHandle;
+use std::env;
 
 #[tokio::main]
 async fn main() {
+    env::set_var("RUST_BACKTRACE", "1");
     let matches = App::new(crate_name!())
         .version(crate_version!())
         .about("A research implementation of the HostStuff protocol.")
@@ -64,6 +66,7 @@ async fn main() {
             let committee_file = subm.value_of("committee").unwrap();
             let parameters_file = subm.value_of("parameters");
             let store_path = subm.value_of("store").unwrap();
+            info!("Creating node");
             match Node::new(committee_file, key_file, store_path, parameters_file).await {
                 Ok(mut node) => {
                     tokio::spawn(async move {
