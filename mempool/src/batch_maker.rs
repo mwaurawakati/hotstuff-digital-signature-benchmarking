@@ -74,20 +74,20 @@ impl BatchMaker {
                 // Assemble client transactions into batches of preset size.
                 Some(transaction) = self.rx_transaction.recv() => {
                     // verify the transaction signature
-                    let message = &transaction[..transaction.len()-96];
-                    let public_key_bytes = &transaction[transaction.len()-96..transaction.len()-64];
-                    let signature_bytes = &transaction[transaction.len()-64..];
-                    let digest = Digest(Sha512::digest(&message).as_slice()[..32].try_into().unwrap());
-                    let signature = EdDSASignature::from_bytes(signature_bytes[..32].try_into().unwrap(), signature_bytes[32..64].try_into().unwrap());
-                    let public_key = EdDSAPublicKey(public_key_bytes.try_into().unwrap());
-                    if signature.verify(&digest, &public_key).is_ok(){
-                        self.current_batch_size += transaction.len();
-                        self.current_batch.push(transaction);
-                        if self.current_batch_size >= self.batch_size {
-                            self.seal().await;
-                            timer.as_mut().reset(Instant::now() + Duration::from_millis(self.max_batch_delay));
-                        }
+                    // let message = &transaction[..transaction.len()-96];
+                    // let public_key_bytes = &transaction[transaction.len()-96..transaction.len()-64];
+                    // let signature_bytes = &transaction[transaction.len()-64..];
+                    // let digest = Digest(Sha512::digest(&message).as_slice()[..32].try_into().unwrap());
+                    // let signature = EdDSASignature::from_bytes(signature_bytes[..32].try_into().unwrap(), signature_bytes[32..64].try_into().unwrap());
+                    // let public_key = EdDSAPublicKey(public_key_bytes.try_into().unwrap());
+                    // if signature.verify(&digest, &public_key).is_ok(){
+                    self.current_batch_size += transaction.len();
+                    self.current_batch.push(transaction);
+                    if self.current_batch_size >= self.batch_size {
+                        self.seal().await;
+                        timer.as_mut().reset(Instant::now() + Duration::from_millis(self.max_batch_delay));
                     }
+                    // }
                     else{
                         warn!("Transaction signature verification failed!");
                     }

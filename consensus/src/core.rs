@@ -112,36 +112,36 @@ impl Core {
             return None;
         }
 
-        if block.payload.len() > 0{
-            let digest = block.payload[0].to_vec();
-            match self.store.read(digest).await {
-                Ok(Some(data)) => {
-                    let deserialized: MempoolMessage = bincode::deserialize(&data[..]).expect("Failed to deserialized batch");
-                    match deserialized {
-                        MempoolMessage::Batch(batch) => {
-                            // Verify messages
-                            for transaction in &batch{
-                                let message = &transaction[..transaction.len()-96];
-                                let public_key_bytes = &transaction[transaction.len()-96..transaction.len()-64];
-                                let signature_bytes = &transaction[transaction.len()-64..];
-                                let digest = Digest(Sha512::digest(&message).as_slice()[..32].try_into().unwrap());
-                                let signature = EdDSASignature::from_bytes(signature_bytes[..32].try_into().unwrap(), signature_bytes[32..64].try_into().unwrap());
-                                let public_key = EdDSAPublicKey(public_key_bytes.try_into().unwrap());
-                                if signature.verify(&digest, &public_key).is_err(){
-                                    return None;
-                                }
-                            }
-                        },
-                        _ => {
-                            warn!("Got batch requrest");
-                            return None;
-                        },
-                    }
-                },
-                Ok(None) => warn!("Block payload: None"),
-                Err(e) => error!("{}", e),
-            }
-        }
+        // if block.payload.len() > 0{
+        //     let digest = block.payload[0].to_vec();
+        //     match self.store.read(digest).await {
+        //         Ok(Some(data)) => {
+        //             let deserialized: MempoolMessage = bincode::deserialize(&data[..]).expect("Failed to deserialized batch");
+        //             match deserialized {
+        //                 MempoolMessage::Batch(batch) => {
+        //                     // Verify messages
+        //                     for transaction in &batch{
+        //                         let message = &transaction[..transaction.len()-96];
+        //                         let public_key_bytes = &transaction[transaction.len()-96..transaction.len()-64];
+        //                         let signature_bytes = &transaction[transaction.len()-64..];
+        //                         let digest = Digest(Sha512::digest(&message).as_slice()[..32].try_into().unwrap());
+        //                         let signature = EdDSASignature::from_bytes(signature_bytes[..32].try_into().unwrap(), signature_bytes[32..64].try_into().unwrap());
+        //                         let public_key = EdDSAPublicKey(public_key_bytes.try_into().unwrap());
+        //                         if signature.verify(&digest, &public_key).is_err(){
+        //                             return None;
+        //                         }
+        //                     }
+        //                 },
+        //                 _ => {
+        //                     warn!("Got batch requrest");
+        //                     return None;
+        //                 },
+        //             }
+        //         },
+        //         Ok(None) => warn!("Block payload: None"),
+        //         Err(e) => error!("{}", e),
+        //     }
+        // }
 
         // Ensure we won't vote for contradicting blocks.
         self.increase_last_voted_round(block.round);
