@@ -39,7 +39,7 @@ def local(ctx):
 
 
 @task
-def create(ctx, nodes=2):
+def create(ctx, nodes=1):
     ''' Create a testbed'''
     try:
         InstanceManager.make().create_instances(nodes)
@@ -57,7 +57,7 @@ def destroy(ctx):
 
 
 @task
-def start(ctx, max=2):
+def start(ctx, max=1):
     ''' Start at most `max` machines per data center '''
     try:
         InstanceManager.make().start_instances(max)
@@ -98,10 +98,10 @@ def remote(ctx):
     bench_params = {
         'faults': 0,
         'nodes': [4],
-        'rate': [50_000],
+        'rate': [30_000],
         'tx_size': 512,
-        'duration': 30,
-        'runs': 1,
+        'duration': 600,
+        'runs': 3,
     }
     node_params = {
         'consensus': {
