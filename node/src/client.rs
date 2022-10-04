@@ -11,7 +11,7 @@ use std::net::SocketAddr;
 use tokio::net::TcpStream;
 use tokio::time::{interval, sleep, Duration, Instant};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
-use crypto::{PublicKey, SecretKey, Signature, Digest};
+use crypto::{Digest, EdDSASignature, EdDSASecretKey, EdDSAPublicKey};
 use ed25519_dalek::Digest as _;
 use ed25519_dalek::Sha512;
 use std::convert::TryInto;
@@ -65,7 +65,7 @@ async fn main() -> Result<()> {
     info!("Transactions size: {} B", size);
     info!("Transactions rate: {} tx/s", rate);
     
-    let (public_key, secret_key) = crypto::generate_production_keypair();
+    let (public_key, secret_key) = crypto::generate_EdDSA_production_keypair();
     let client = Client {
         public_key,
         secret_key,
@@ -84,8 +84,8 @@ async fn main() -> Result<()> {
 }
 
 struct Client {
-    public_key: PublicKey,
-    secret_key: SecretKey,
+    public_key: EdDSAPublicKey,
+    secret_key: EdDSASecretKey,
     target: SocketAddr,
     size: usize,
     rate: u64,
@@ -145,7 +145,7 @@ impl Client {
                 let message = &tx[..];
                 let digest = Digest(Sha512::digest(&message).as_slice()[..32].try_into().unwrap());
                 // TODO: change to EdDSA siganture
-                let signature = Signature::new(&digest, &self.secret_key);
+                let signature = EdDSASignature::new(&digest, &self.secret_key);
                 tx.put_slice(&self.public_key.0[..]);
                 tx.put_slice(&signature.flatten());
                 let bytes = tx.split().freeze();

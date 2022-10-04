@@ -1,10 +1,7 @@
 use crate::mempool::MempoolMessage;
 use crate::quorum_waiter::QuorumWaiterMessage;
 use bytes::Bytes;
-#[cfg(feature = "benchmark")]
-use crypto::Digest;
-use crypto::PublicKey;
-use crypto::Signature;
+use crypto::{Digest, EdDSAPublicKey, EdDSASignature, PublicKey};
 #[cfg(feature = "benchmark")]
 use ed25519_dalek::{Digest as _, Sha512};
 #[cfg(feature = "benchmark")]
@@ -72,28 +69,21 @@ impl BatchMaker {
     async fn run(&mut self) {
         let timer = sleep(Duration::from_millis(self.max_batch_delay));
         tokio::pin!(timer);
-        let mut signatures = Vec::new();
-
         loop {
             tokio::select! {
                 // Assemble client transactions into batches of preset size.
                 Some(transaction) = self.rx_transaction.recv() => {
                     // verify the transaction signature
-                    let message = &transaction[..transaction.len()-144];
-                    let public_key_bytes = &transaction[transaction.len()-144..transaction.len()-96];
-                    let signature_bytes = &transaction[transaction.len()-96..];
+                    let message = &transaction[..transaction.len()-96];
+                    let public_key_bytes = &transaction[transaction.len()-96..transaction.len()-64];
+                    let signature_bytes = &transaction[transaction.len()-64..];
                     let digest = Digest(Sha512::digest(&message).as_slice()[..32].try_into().unwrap());
-                    // TODO: change to EdDSA signature
-                    let signature = Signature::from_bytes(signature_bytes[..48].try_into().unwrap(), signature_bytes[48..96].try_into().unwrap());
-                    let public_key = PublicKey(public_key_bytes.try_into().unwrap());
+                    let signature = EdDSASignature::from_bytes(signature_bytes[..32].try_into().unwrap(), signature_bytes[32..64].try_into().unwrap());
+                    let public_key = EdDSAPublicKey(public_key_bytes.try_into().unwrap());
                     if signature.verify(&digest, &public_key).is_ok(){
-                        signatures.push(signature.clone());
-                        self.current_batch_size += transaction.len() - 96;
-                        self.current_batch.push(transaction[..transaction.len()-96].to_vec());
-                        if self.current_batch_size >= self.batch_size - 96 {
-                            let asig = Signature::aggregate_signatures(&signatures);
-                            self.current_batch.push(asig.flatten().to_vec());
-                            signatures.clear();
+                        self.current_batch_size += transaction.len();
+                        self.current_batch.push(transaction);
+                        if self.current_batch_size >= self.batch_size {
                             self.seal().await;
                             timer.as_mut().reset(Instant::now() + Duration::from_millis(self.max_batch_delay));
                         }
@@ -106,9 +96,6 @@ impl BatchMaker {
                 // If the timer triggers, seal the batch even if it contains few transactions.
                 () = &mut timer => {
                     if !self.current_batch.is_empty() {
-                        let asig = Signature::aggregate_signatures(&signatures);
-                        self.current_batch.push(asig.flatten().to_vec());
-                        signatures.clear();
                         self.seal().await;
                     }
                     timer.as_mut().reset(Instant::now() + Duration::from_millis(self.max_batch_delay));

@@ -12,7 +12,7 @@ use mempool::mempool::MempoolMessage;
 use async_recursion::async_recursion;
 use bytes::Bytes;
 use crypto::Hash as _;
-use crypto::{PublicKey, SignatureService, Digest, Signature};
+use crypto::{PublicKey, SignatureService, Digest, EdDSASignature, EdDSAPublicKey};
 use ed25519_dalek::{Digest as _, Sha512};
 use log::{debug, error, info, warn};
 use network::SimpleSender;
@@ -118,22 +118,18 @@ impl Core {
                 Ok(Some(data)) => {
                     let deserialized: MempoolMessage = bincode::deserialize(&data[..]).expect("Failed to deserialized batch");
                     match deserialized {
-                        MempoolMessage::Batch(mut batch) => {
+                        MempoolMessage::Batch(batch) => {
                             // Verify messages
-                            let asig_bytes = batch.pop().unwrap();
-                            let asig = Signature::from_bytes(asig_bytes[..48].try_into().unwrap(), asig_bytes[48..].try_into().unwrap());
-                            let mut digests = Vec::new();
-                            let mut public_keys = Vec::new();
                             for transaction in &batch{
-                                let message = &transaction[..transaction.len()-48];
-                                let public_key_bytes = &transaction[transaction.len()-48..];
+                                let message = &transaction[..transaction.len()-96];
+                                let public_key_bytes = &transaction[transaction.len()-96..transaction.len()-64];
+                                let signature_bytes = &transaction[transaction.len()-64..];
                                 let digest = Digest(Sha512::digest(&message).as_slice()[..32].try_into().unwrap());
-                                let public_key = PublicKey(public_key_bytes.try_into().unwrap());
-                                digests.push(digest);
-                                public_keys.push(public_key);
-                            }
-                            if asig.verify_aggregated_signature(&digests, &public_keys).is_err(){
-                                return None;
+                                let signature = EdDSASignature::from_bytes(signature_bytes[..32].try_into().unwrap(), signature_bytes[32..64].try_into().unwrap());
+                                let public_key = EdDSAPublicKey(public_key_bytes.try_into().unwrap());
+                                if signature.verify(&digest, &public_key).is_err(){
+                                    return None;
+                                }
                             }
                         },
                         _ => {
