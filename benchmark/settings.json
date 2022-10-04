@@ -1,8 +1,8 @@
 {
     "testbed": "hotstuff",
     "key": {
-        "name": "aws",
-        "path": "/absolute/ssh/key/path"
+        "name": "zhuolun",
+        "path": "/Users/a54780/.ssh/aws"
     },
     "ports": {
         "consensus": 8000,
@@ -10,18 +10,17 @@
         "front": 6000
     },
     "repo": {
-        "name": "hotstuff",
-        "url": "https://github.com/asonnino/hotstuff.git",
-        "branch": "main"
+        "name": "hotstuff-digital-signature-benchmarking",
+        "url": "https://github.com/radiken/hotstuff-digital-signature-benchmarking.git",
+        "branch": "mix-signatures"
     },
     "instances": {
-        "type": "m5d.8xlarge",
+        "type": "t3.medium",
         "regions": [
             "us-east-1",
             "eu-north-1",
             "ap-southeast-2",
-            "us-west-1",
-            "ap-northeast-1"
+            "us-west-1"
         ]
     }
 }
