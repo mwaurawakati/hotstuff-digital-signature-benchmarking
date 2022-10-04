@@ -83,6 +83,7 @@ impl BatchMaker {
                     let public_key_bytes = &transaction[transaction.len()-144..transaction.len()-96];
                     let signature_bytes = &transaction[transaction.len()-96..];
                     let digest = Digest(Sha512::digest(&message).as_slice()[..32].try_into().unwrap());
+                    // TODO: change to EdDSA signature
                     let signature = Signature::from_bytes(signature_bytes[..48].try_into().unwrap(), signature_bytes[48..96].try_into().unwrap());
                     let public_key = PublicKey(public_key_bytes.try_into().unwrap());
                     if signature.verify(&digest, &public_key).is_ok(){

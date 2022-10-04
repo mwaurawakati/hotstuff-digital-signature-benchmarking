@@ -415,3 +415,176 @@ impl SignatureService {
             .expect("Failed to receive signature from Signature Service")
     }
 }
+
+
+
+// ------------ EdDSA --------------
+
+
+
+use ed25519_dalek as dalek;
+use ed25519_dalek::ed25519;
+use ed25519_dalek::Signer as _;
+use rand7::rngs::OsRng as OsRng7;
+use rand7::CryptoRng as CryptoRng7;
+use rand7::RngCore as RngCore7;
+use ed25519_dalek::ed25519::Error as EdDSAError;
+
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Default)]
+pub struct EdDSAPublicKey(pub [u8; 32]);
+
+impl EdDSAPublicKey {
+    pub fn encode_base64(&self) -> String {
+        base64::encode(&self.0[..])
+    }
+
+    pub fn decode_base64(s: &str) -> Result<Self, base64::DecodeError> {
+        let bytes = base64::decode(s)?;
+        let array = bytes[..32]
+            .try_into()
+            .map_err(|_| base64::DecodeError::InvalidLength)?;
+        Ok(Self(array))
+    }
+}
+
+impl fmt::Debug for EdDSAPublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "{}", self.encode_base64())
+    }
+}
+
+impl fmt::Display for EdDSAPublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "{}", self.encode_base64().get(0..16).unwrap())
+    }
+}
+
+impl Serialize for EdDSAPublicKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: ser::Serializer,
+    {
+        serializer.serialize_str(&self.encode_base64())
+    }
+}
+
+impl<'de> Deserialize<'de> for EdDSAPublicKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let value = Self::decode_base64(&s).map_err(|e| de::Error::custom(e.to_string()))?;
+        Ok(value)
+    }
+}
+
+impl AsRef<[u8]> for EdDSAPublicKey {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+pub struct EdDSASecretKey([u8; 64]);
+
+impl EdDSASecretKey {
+    pub fn encode_base64(&self) -> String {
+        base64::encode(&self.0[..])
+    }
+
+    pub fn decode_base64(s: &str) -> Result<Self, base64::DecodeError> {
+        let bytes = base64::decode(s)?;
+        let array = bytes[..64]
+            .try_into()
+            .map_err(|_| base64::DecodeError::InvalidLength)?;
+        Ok(Self(array))
+    }
+}
+
+impl Serialize for EdDSASecretKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: ser::Serializer,
+    {
+        serializer.serialize_str(&self.encode_base64())
+    }
+}
+
+impl<'de> Deserialize<'de> for EdDSASecretKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let value = Self::decode_base64(&s).map_err(|e| de::Error::custom(e.to_string()))?;
+        Ok(value)
+    }
+}
+
+impl Drop for EdDSASecretKey {
+    fn drop(&mut self) {
+        self.0.iter_mut().for_each(|x| *x = 0);
+    }
+}
+
+pub fn generate_EdDSA_production_keypair() -> (EdDSAPublicKey, EdDSASecretKey) {
+    generate_EdDSA_keypair(&mut OsRng7)
+}
+
+pub fn generate_EdDSA_keypair<R>(csprng: &mut R) -> (EdDSAPublicKey, EdDSASecretKey)
+where
+    R: CryptoRng7 + RngCore7,
+{
+    let keypair = dalek::Keypair::generate(csprng);
+    let public = EdDSAPublicKey(keypair.public.to_bytes());
+    let secret = EdDSASecretKey(keypair.to_bytes());
+    (public, secret)
+}
+
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
+pub struct EdDSASignature {
+    part1: [u8; 32],
+    part2: [u8; 32],
+}
+
+impl EdDSASignature {
+    pub fn new(digest: &Digest, secret: &EdDSASecretKey) -> Self {
+        let keypair = dalek::Keypair::from_bytes(&secret.0).expect("Unable to load secret key");
+        let sig = keypair.sign(&digest.0).to_bytes();
+        let part1 = sig[..32].try_into().expect("Unexpected signature length");
+        let part2 = sig[32..64].try_into().expect("Unexpected signature length");
+        EdDSASignature { part1, part2 }
+    }
+
+    pub fn from_bytes(part1: [u8; 32], part2: [u8; 32]) -> Self {
+        EdDSASignature { part1, part2 }
+    }
+
+    pub fn flatten(&self) -> [u8; 64] {
+        [self.part1, self.part2]
+            .concat()
+            .try_into()
+            .expect("Unexpected signature length")
+    }
+
+    pub fn verify(&self, digest: &Digest, public_key: &EdDSAPublicKey) -> Result<(), EdDSAError> {
+        let signature = ed25519::signature::Signature::from_bytes(&self.flatten())?;
+        let key = dalek::PublicKey::from_bytes(&public_key.0)?;
+        key.verify_strict(&digest.0, &signature)
+    }
+
+    pub fn verify_batch<'a, I>(digest: &Digest, votes: I) -> Result<(), EdDSAError>
+    where
+        I: IntoIterator<Item = &'a (EdDSAPublicKey, EdDSASignature)>,
+    {
+        let mut messages: Vec<&[u8]> = Vec::new();
+        let mut signatures: Vec<dalek::Signature> = Vec::new();
+        let mut keys: Vec<dalek::PublicKey> = Vec::new();
+        for (key, sig) in votes.into_iter() {
+            messages.push(&digest.0[..]);
+            signatures.push(ed25519::signature::Signature::from_bytes(&sig.flatten())?);
+            keys.push(dalek::PublicKey::from_bytes(&key.0)?);
+        }
+        dalek::verify_batch(&messages[..], &signatures[..], &keys[..])
+    }
+}

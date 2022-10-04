@@ -144,6 +144,7 @@ impl Client {
                 // sign the transaction
                 let message = &tx[..];
                 let digest = Digest(Sha512::digest(&message).as_slice()[..32].try_into().unwrap());
+                // TODO: change to EdDSA siganture
                 let signature = Signature::new(&digest, &self.secret_key);
                 tx.put_slice(&self.public_key.0[..]);
                 tx.put_slice(&signature.flatten());
