@@ -92,9 +92,9 @@ impl BatchMaker {
                         timer.as_mut().reset(Instant::now() + Duration::from_millis(self.max_batch_delay));
                     }
                     // }
-                    else{
-                        warn!("Transaction signature verification failed!");
-                    }
+                    // else{
+                    //     warn!("Transaction signature verification failed!");
+                    // }
                 },
 
                 // If the timer triggers, seal the batch even if it contains few transactions.

@@ -149,7 +149,6 @@ impl Client {
                 tx.put_slice(&self.public_key.0[..]);
                 tx.put_slice(&signature.flatten());
                 let bytes = tx.split().freeze();
-                info!("{:?}", bytes);
 
 
                 if let Err(e) = transport.send(bytes).await {
