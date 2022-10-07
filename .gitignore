@@ -20,3 +20,5 @@ Cargo.lock
 **/*.rs.bk
 
 __pycache__/
+
+results/*.txt
