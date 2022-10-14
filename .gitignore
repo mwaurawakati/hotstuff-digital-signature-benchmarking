@@ -21,4 +21,4 @@ Cargo.lock
 
 __pycache__/
 
-results/*.txt
+*.txt
