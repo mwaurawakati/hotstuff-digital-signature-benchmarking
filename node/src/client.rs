@@ -11,10 +11,8 @@ use std::net::SocketAddr;
 use tokio::net::TcpStream;
 use tokio::time::{interval, sleep, Duration, Instant};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
-use crypto::{PublicKey, SecretKey, Signature, Digest};
+use crypto::{PublicKey, SecretKey};
 use ed25519_dalek::Digest as _;
-use ed25519_dalek::Sha512;
-use std::convert::TryInto;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -140,14 +138,6 @@ impl Client {
                     tx.put_u64(r); // Ensures all clients send different txs.
                 };
                 tx.resize(self.size, 0u8);
-                // let bytes = tx.split().freeze();
-
-                // sign the transaction
-                let message = &tx[..];
-                let digest = Digest(Sha512::digest(&message).as_slice()[..32].try_into().unwrap());
-                let signature = Signature::new(&digest, &self.secret_key);
-                tx.put_slice(&self.public_key.0[..]);
-                tx.put_slice(&signature.flatten());
                 let bytes = tx.split().freeze();
 
 
