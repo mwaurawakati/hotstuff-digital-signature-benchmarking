@@ -1,7 +1,7 @@
 use crate::mempool::MempoolMessage;
 use crate::quorum_waiter::QuorumWaiterMessage;
 use bytes::Bytes;
-use crypto::{Digest, EdDSAPublicKey, EdDSASignature, PublicKey};
+use crypto::{Digest, PublicKey};
 #[cfg(feature = "benchmark")]
 use ed25519_dalek::{Digest as _, Sha512};
 #[cfg(feature = "benchmark")]

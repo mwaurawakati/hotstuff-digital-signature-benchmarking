@@ -7,8 +7,8 @@ from statistics import mean
 
 from benchmark.utils import Print
 
-SIGNATURE_LENGTH = 64
-PUBLICKEY_LENGTH = 32
+SIGNATURE_LENGTH = 0
+PUBLICKEY_LENGTH = 0
 
 class ParseError(Exception):
     pass

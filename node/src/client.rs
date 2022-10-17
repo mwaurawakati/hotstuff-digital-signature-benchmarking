@@ -11,10 +11,7 @@ use std::net::SocketAddr;
 use tokio::net::TcpStream;
 use tokio::time::{interval, sleep, Duration, Instant};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
-use crypto::{Digest, EdDSASignature, EdDSASecretKey, EdDSAPublicKey};
-use ed25519_dalek::Digest as _;
-use ed25519_dalek::Sha512;
-use std::convert::TryInto;
+use crypto::{EdDSASecretKey, EdDSAPublicKey};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -112,7 +109,7 @@ impl Client {
 
         // Submit all transactions.
         let burst = self.rate / PRECISION;
-        let mut tx = BytesMut::with_capacity(self.size+48+96);
+        let mut tx = BytesMut::with_capacity(self.size);
         let mut counter = 0;
         let mut r = rand::thread_rng().gen();
         let mut transport = Framed::new(stream, LengthDelimitedCodec::new());
@@ -140,14 +137,6 @@ impl Client {
                     tx.put_u64(r); // Ensures all clients send different txs.
                 };
                 tx.resize(self.size, 0u8);
-
-                // sign the transaction
-                let message = &tx[..];
-                let digest = Digest(Sha512::digest(&message).as_slice()[..32].try_into().unwrap());
-                // TODO: change to EdDSA siganture
-                let signature = EdDSASignature::new(&digest, &self.secret_key);
-                tx.put_slice(&self.public_key.0[..]);
-                tx.put_slice(&signature.flatten());
                 let bytes = tx.split().freeze();
 
                 if let Err(e) = transport.send(bytes).await {
