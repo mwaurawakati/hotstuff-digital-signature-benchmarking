@@ -262,7 +262,7 @@ impl Core {
         }
 
         // Ensure the timeout is well formed.
-        timeout.verify(&self.committee)?;
+        timeout.verify(&mut self.committee)?;
 
         // Process the QC embedded in the timeout.
         self.process_qc(&timeout.high_qc).await;
@@ -407,7 +407,7 @@ impl Core {
         );
 
         // Check the block is correctly formed.
-        block.verify(&self.committee)?;
+        block.verify(&mut self.committee)?;
 
         // Process the QC. This may allow us to advance round.
         self.process_qc(&block.qc).await;

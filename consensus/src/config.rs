@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::convert::TryInto;
+use indexmap::IndexMap;
 
 pub type Index = u32;
 pub type Stake = u32;
@@ -33,7 +34,6 @@ impl Parameters {
 }
 
 static mut APK: Option<PublicKey> = None;
-// static mut index_pk_map: HashMap<Index, PublicKey> = HashMap::default();
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Authority {
@@ -47,6 +47,7 @@ pub struct Committee {
     pub authorities: HashMap<PublicKey, Authority>,
     pub epoch: EpochNumber,
     pub index_pk_map: HashMap<Index, PublicKey>,
+    pub apk_cache: IndexMap<Vec<bool>, PublicKey>,
 }
 
 impl Committee {
@@ -61,6 +62,7 @@ impl Committee {
                 .collect(),
             epoch: epoch,
             index_pk_map: info.into_iter().map(|(name, index, _, _)| (index, name)).collect(),
+            apk_cache: IndexMap::with_capacity(10),
         };
         c.update_apk();
         return c;
@@ -133,5 +135,16 @@ impl Committee {
             }
         }
         return pks;
+    }
+
+    pub fn cache_apk(&mut self, binary_repr: Vec<bool>, apk: PublicKey) {
+        if self.apk_cache.len() >= 10{
+            self.apk_cache.swap_remove_index(0);
+        }
+        self.apk_cache.insert(binary_repr, apk);
+    }
+
+    pub fn check_cache(&self, binary_repr: &Vec<bool>) -> Option<&PublicKey> {
+        return self.apk_cache.get(binary_repr);
     }
 }

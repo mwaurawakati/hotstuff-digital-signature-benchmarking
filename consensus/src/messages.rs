@@ -52,7 +52,7 @@ impl Block {
         &self.qc.hash
     }
 
-    pub fn verify(&self, committee: &Committee) -> ConsensusResult<()> {
+    pub fn verify(&self, committee: &mut Committee) -> ConsensusResult<()> {
         // Ensure the authority has voting rights.
         let voting_rights = committee.stake(&self.author);
         ensure!(
@@ -178,26 +178,34 @@ impl QC {
         self.hash == Digest::default() && self.round != 0
     }
 
-    pub fn verify(&self, committee: &Committee) -> ConsensusResult<()> {
-        // Ensure the QC has a quorum.
-        let mut weight = 0;
-        let pks = committee.binary_repr_to_public_keys(&self.votes);
-        for name in pks.iter() {
-            let voting_rights = committee.stake(name);
-            ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
-            weight += voting_rights;
-        }
-        ensure!(
-            weight >= committee.quorum_threshold(),
-            ConsensusError::QCRequiresQuorum
-        );
+    pub fn verify(&self, committee: &mut Committee) -> ConsensusResult<()> {
+        match committee.check_cache(&self.votes) {
+            Some(apk) => {
+                return self.signature.verify(&self.digest(), &apk).map_err(ConsensusError::from)
+            }
+            None => {
+                // Ensure the QC has a quorum.
+                let mut weight = 0;
+                let pks = committee.binary_repr_to_public_keys(&self.votes);
+                for name in pks.iter() {
+                    let voting_rights = committee.stake(name);
+                    ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
+                    weight += voting_rights;
+                }
+                ensure!(
+                    weight >= committee.quorum_threshold(),
+                    ConsensusError::QCRequiresQuorum
+                );
 
-        // Check the signatures.
-        let neg_votes = self.votes.iter().map(|vote| !vote).collect();
-        let neg_pks = committee.binary_repr_to_public_keys(&neg_votes);
-        let apk = committee.get_apk().batch_sub(&neg_pks);
-        // let apk = PublicKey::aggregate_public_keys(&pks);
-        self.signature.verify(&self.digest(), &apk).map_err(ConsensusError::from)
+                // Check the signatures.
+                let neg_votes = self.votes.iter().map(|vote| !vote).collect();
+                let neg_pks = committee.binary_repr_to_public_keys(&neg_votes);
+                let apk = committee.get_apk().batch_sub(&neg_pks);
+                committee.cache_apk(self.votes.clone(), apk);
+                // let apk = PublicKey::aggregate_public_keys(&pks);
+                self.signature.verify(&self.digest(), &apk).map_err(ConsensusError::from)
+            }
+        }
     }
 }
 
@@ -250,7 +258,7 @@ impl Timeout {
         }
     }
 
-    pub fn verify(&self, committee: &Committee) -> ConsensusResult<()> {
+    pub fn verify(&self, committee: &mut Committee) -> ConsensusResult<()> {
         // Ensure the authority has voting rights.
         ensure!(
             committee.stake(&self.author) > 0,
