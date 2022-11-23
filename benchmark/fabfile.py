@@ -57,7 +57,7 @@ def destroy(ctx):
 
 
 @task
-def start(ctx, max=2):
+def start(ctx, max=1):
     ''' Start at most `max` machines per data center '''
     try:
         InstanceManager.make().start_instances(max)
