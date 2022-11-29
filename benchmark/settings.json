@@ -12,13 +12,13 @@
     "repo": {
         "name": "hotstuff-digital-signature-benchmarking",
         "url": "https://github.com/radiken/hotstuff-digital-signature-benchmarking.git",
-        "branch": "mix-signatures"
+        "branch": "bls-multisig-cached"
     },
     "instances": {
         "type": "t3.medium",
         "regions": [
             "us-east-1",
-            "eu-north-1",
+            "eu-central-1",
             "ap-southeast-2",
             "us-west-1"
         ]
