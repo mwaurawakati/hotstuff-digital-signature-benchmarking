@@ -144,7 +144,12 @@ impl Committee {
         self.apk_cache.insert(binary_repr, apk);
     }
 
-    pub fn check_cache(&self, binary_repr: &Vec<bool>) -> Option<&PublicKey> {
-        return self.apk_cache.get(binary_repr);
+    pub fn check_cache(&mut self, binary_repr: &Vec<bool>) -> Option<PublicKey> {
+        let result = self.apk_cache.get(binary_repr).cloned();
+        if result.is_some() & (self.apk_cache.len()==10){
+            let index = self.apk_cache.get_index_of(binary_repr).unwrap();
+            self.apk_cache.move_index(index, 9);
+        }
+        return result;
     }
 }
