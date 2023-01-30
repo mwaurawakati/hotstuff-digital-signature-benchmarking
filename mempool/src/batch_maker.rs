@@ -5,7 +5,7 @@ use crypto::{Digest, PublicKey};
 #[cfg(feature = "benchmark")]
 use ed25519_dalek::{Digest as _, Sha512};
 #[cfg(feature = "benchmark")]
-use log::{info, warn};
+use log::{info};
 use network::ReliableSender;
 #[cfg(feature = "benchmark")]
 use std::convert::TryInto as _;

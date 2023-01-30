@@ -11,7 +11,6 @@ use std::net::SocketAddr;
 use tokio::net::TcpStream;
 use tokio::time::{interval, sleep, Duration, Instant};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
-use crypto::{EdDSASecretKey, EdDSAPublicKey};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -62,10 +61,7 @@ async fn main() -> Result<()> {
     info!("Transactions size: {} B", size);
     info!("Transactions rate: {} tx/s", rate);
     
-    let (public_key, secret_key) = crypto::generate_EdDSA_production_keypair();
     let client = Client {
-        public_key,
-        secret_key,
         target,
         size,
         rate,
@@ -81,8 +77,6 @@ async fn main() -> Result<()> {
 }
 
 struct Client {
-    public_key: EdDSAPublicKey,
-    secret_key: EdDSASecretKey,
     target: SocketAddr,
     size: usize,
     rate: u64,
