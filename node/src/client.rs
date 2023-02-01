@@ -11,8 +11,6 @@ use std::net::SocketAddr;
 use tokio::net::TcpStream;
 use tokio::time::{interval, sleep, Duration, Instant};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
-use crypto::{PublicKey, SecretKey};
-use ed25519_dalek::Digest as _;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -63,10 +61,8 @@ async fn main() -> Result<()> {
     info!("Transactions size: {} B", size);
     info!("Transactions rate: {} tx/s", rate);
     
-    let (public_key, secret_key) = crypto::generate_production_keypair();
+    // let (public_key, secret_key) = crypto::generate_production_keypair();
     let client = Client {
-        public_key,
-        secret_key,
         target,
         size,
         rate,
@@ -82,8 +78,6 @@ async fn main() -> Result<()> {
 }
 
 struct Client {
-    public_key: PublicKey,
-    secret_key: SecretKey,
     target: SocketAddr,
     size: usize,
     rate: u64,
