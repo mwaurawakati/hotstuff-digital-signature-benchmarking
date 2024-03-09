@@ -17,3 +17,11 @@ bls-signatures = { git = "https://github.com/filecoin-project/bls-signatures/" }
 bls12_381 = { version = "=0.7.0", features = ["experimental"] }
 sha2 = { version = "0.9"}
 ff = "0.12"
+w3f-bls = "0.1.3"
+ark-ec = "0.4.2"
+ark-ff = "0.4.2"
+ark-bls12-381 = "0.4.0"
+ark-std = "0.4.0"
+ark-test-curves = "0.4.2"
+paired = "0.22.0"
+ark-bls12-377 = "0.4.0"

@@ -124,8 +124,11 @@ fn verify_valid_multisig() {
             (public_key, Signature::new(&digest, &secret_key))
         })
         .collect();
-    
-    let (mut public_keys, mut sigs): (Vec<PublicKey>, Vec<Signature>) = signatures.iter().map(|(a,b)| (a.clone(),b.clone())).unzip();
+
+    let (mut public_keys, mut sigs): (Vec<PublicKey>, Vec<Signature>) = signatures
+        .iter()
+        .map(|(a, b)| (a.clone(), b.clone()))
+        .unzip();
     let asig = Signature::multisig_aggregate(&public_keys, &sigs).unwrap();
     let apk = PublicKey::aggregate_public_keys(&public_keys);
 
@@ -152,7 +155,10 @@ fn verify_invalid_multisig() {
         })
         .collect();
 
-    let (mut public_keys, mut sigs): (Vec<PublicKey>, Vec<Signature>) = signatures.iter().map(|(a,b)| (a.clone(),b.clone())).unzip();
+    let (mut public_keys, mut sigs): (Vec<PublicKey>, Vec<Signature>) = signatures
+        .iter()
+        .map(|(a, b)| (a.clone(), b.clone()))
+        .unzip();
 
     // Add an invalid signature.
     let (public_key, _) = keys.pop().unwrap();
@@ -166,15 +172,27 @@ fn verify_invalid_multisig() {
 
 #[test]
 fn multisig_aggregate_pks() {
-    let pk1 = PublicKey::decode_base64(&"qUWMTJd6KYCvUkkwM4tbaNd5O1/xBoEiJUYK3B5zFZZGC/+U9W8lkJQJAZzoVXyx").unwrap();
-    let pk2 = PublicKey::decode_base64(&"iyAaB4DOmqk6JdOIv15FGWZKnHDp/nGowrI2yR3mYcte4J1w3xeaVOLWmE3QIbvI").unwrap();
-    let pk3 = PublicKey::decode_base64(&"qRALZZDwJM3dJsiFErD6zRQGoWTRxeFhIJ/PZaZPMI+DQWG3WxR/oOTjVmXhEy5q").unwrap();
-    let pk4 = PublicKey::decode_base64(&"sq3cx16Bv8TMQkhgADbz595uAMapjiNEvP6q6iQ98Thrj4t/zjeA0PEIYJLq7njn").unwrap();
+    let pk1 = PublicKey::decode_base64(
+        &"qUWMTJd6KYCvUkkwM4tbaNd5O1/xBoEiJUYK3B5zFZZGC/+U9W8lkJQJAZzoVXyx",
+    )
+    .unwrap();
+    let pk2 = PublicKey::decode_base64(
+        &"iyAaB4DOmqk6JdOIv15FGWZKnHDp/nGowrI2yR3mYcte4J1w3xeaVOLWmE3QIbvI",
+    )
+    .unwrap();
+    let pk3 = PublicKey::decode_base64(
+        &"qRALZZDwJM3dJsiFErD6zRQGoWTRxeFhIJ/PZaZPMI+DQWG3WxR/oOTjVmXhEy5q",
+    )
+    .unwrap();
+    let pk4 = PublicKey::decode_base64(
+        &"sq3cx16Bv8TMQkhgADbz595uAMapjiNEvP6q6iQ98Thrj4t/zjeA0PEIYJLq7njn",
+    )
+    .unwrap();
     // let sk1 = SecretKey::decode_base64(&"zO/b5BTntAk0/6w/dEAxfGe6PNVG7o/qtHGzSKNLSgg=").unwrap();
     // let sk2 = SecretKey::decode_base64(&"HZjtRPKnV/+eIhpVs5rCRkb5XS12ShMowq5DAdMuyzo=").unwrap();
     // let sk3 = SecretKey::decode_base64(&"rgc3GUSPANeFq9FrG0TnFSACLtC71/afPXnGHfoZn10=").unwrap();
     // let sk4 = SecretKey::decode_base64(&"K/ISv61Jc5h8hWNZXXItDAXMHTXCG8f/N3GmDU2uMSk=").unwrap();
-    let pks = vec![pk1,pk2,pk3,pk4];
+    let pks = vec![pk1, pk2, pk3, pk4];
     // let sks = vec![sk1, sk2, sk3, sk4];
 
     // let message: &[u8] = b"Hello, world!";
@@ -183,23 +201,37 @@ fn multisig_aggregate_pks() {
     // let asig = Signature::multisig_aggregate(&pks, &sigs).unwrap();
 
     let apk = PublicKey::aggregate_public_keys(&pks);
-    assert!(apk.encode_base64()=="rofYz5Bz1lkvoT6wtmkp+jjFuejiKTT9/te1Z+nG4Jn6ZBRb560QKc7mNHM2f8JV");
+    assert!(
+        apk.encode_base64() == "rofYz5Bz1lkvoT6wtmkp+jjFuejiKTT9/te1Z+nG4Jn6ZBRb560QKc7mNHM2f8JV"
+    );
 }
 
 #[test]
 fn test_pk_sub() {
-    let pk1 = PublicKey::decode_base64(&"qUWMTJd6KYCvUkkwM4tbaNd5O1/xBoEiJUYK3B5zFZZGC/+U9W8lkJQJAZzoVXyx").unwrap();
-    let pk2 = PublicKey::decode_base64(&"iyAaB4DOmqk6JdOIv15FGWZKnHDp/nGowrI2yR3mYcte4J1w3xeaVOLWmE3QIbvI").unwrap();
-    let pk3 = PublicKey::decode_base64(&"qRALZZDwJM3dJsiFErD6zRQGoWTRxeFhIJ/PZaZPMI+DQWG3WxR/oOTjVmXhEy5q").unwrap();
-    let pk4 = PublicKey::decode_base64(&"sq3cx16Bv8TMQkhgADbz595uAMapjiNEvP6q6iQ98Thrj4t/zjeA0PEIYJLq7njn").unwrap();
-    let pks = vec![pk1,pk2,pk3,pk4];
+    let pk1 = PublicKey::decode_base64(
+        &"qUWMTJd6KYCvUkkwM4tbaNd5O1/xBoEiJUYK3B5zFZZGC/+U9W8lkJQJAZzoVXyx",
+    )
+    .unwrap();
+    let pk2 = PublicKey::decode_base64(
+        &"iyAaB4DOmqk6JdOIv15FGWZKnHDp/nGowrI2yR3mYcte4J1w3xeaVOLWmE3QIbvI",
+    )
+    .unwrap();
+    let pk3 = PublicKey::decode_base64(
+        &"qRALZZDwJM3dJsiFErD6zRQGoWTRxeFhIJ/PZaZPMI+DQWG3WxR/oOTjVmXhEy5q",
+    )
+    .unwrap();
+    let pk4 = PublicKey::decode_base64(
+        &"sq3cx16Bv8TMQkhgADbz595uAMapjiNEvP6q6iQ98Thrj4t/zjeA0PEIYJLq7njn",
+    )
+    .unwrap();
+    let pks = vec![pk1, pk2, pk3, pk4];
 
     let apk = PublicKey::aggregate_public_keys(&pks);
     let pk123 = apk.batch_sub(&vec![pk4]);
-    let apk123 = PublicKey::aggregate_public_keys(&vec![pk1,pk2,pk3]);
-    let apk321 = PublicKey::aggregate_public_keys(&vec![pk3,pk2,pk1]);
-    assert!(apk123.encode_base64()==pk123.encode_base64());
-    assert!(apk123.encode_base64()==apk321.encode_base64());
+    let apk123 = PublicKey::aggregate_public_keys(&vec![pk1, pk2, pk3]);
+    let apk321 = PublicKey::aggregate_public_keys(&vec![pk3, pk2, pk1]);
+    assert!(apk123.encode_base64() == pk123.encode_base64());
+    assert!(apk123.encode_base64() == apk321.encode_base64());
 }
 
 #[tokio::test]
