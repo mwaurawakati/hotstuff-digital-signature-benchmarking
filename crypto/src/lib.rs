@@ -1,4 +1,5 @@
-use ark_bls12_377::Bls12_377;
+use ark_bls12_381::Config;
+use ark_ec::bls12::{G2Affine, G2Projective};
 use ark_ec::models::short_weierstrass::Projective;
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_std::Zero;
@@ -17,14 +18,14 @@ use w3f_bls::single::SignedMessage;
 use w3f_bls::SerializableToBytes;
 use w3f_bls::Signed;
 use w3f_bls::{
-    engine::{TinyBLS, TinyBLS377},
-    Message, PublicKey as W3fPublicKey, SecretKey as W3fSecretKey, Signature as W3fSignature,
+    engine::UsualBLS, Message, PublicKey as W3fPublicKey, SecretKey as W3fSecretKey,
+    Signature as W3fSignature,
 };
-use w3f_bls::engine::EngineBLS;
+
 #[cfg(test)]
 #[path = "tests/crypto_tests.rs"]
 pub mod crypto_tests;
-
+pub type TinyBLSG2 = UsualBLS<ark_bls12_381::Bls12_381, ark_bls12_381::Config>;
 pub type CryptoError = bls_signatures::Error;
 
 /// Represents a hash digest (32 bytes).
@@ -93,17 +94,15 @@ impl PublicKey {
     pub fn aggregate_public_keys(public_keys: &Vec<PublicKey>) -> Self {
         let mut aggregated_pk = Projective::zero();
         for i in 0..public_keys.len() {
-            let g1point = W3fPublicKey::<TinyBLS<Bls12_377, ark_bls12_377::Config>>::from_bytes(
-                &public_keys[i].0,
-            )
-            .unwrap()
-            .0
-            .into_affine();
-            aggregated_pk.add(g1point);
+            let point = W3fPublicKey::<TinyBLSG2>::from_bytes(&public_keys[i].0)
+                .unwrap()
+                .0
+                .into_affine();
+            aggregated_pk = aggregated_pk.add(point);
         }
         let gr = aggregated_pk.into_affine().into_group();
         let apk = PublicKey(
-            W3fPublicKey::<TinyBLS377>(gr).to_bytes()[..]
+            W3fPublicKey::<TinyBLSG2>(gr).to_bytes()[..]
                 .try_into()
                 .expect("Unexpected public key length"),
         );
@@ -134,15 +133,15 @@ impl PublicKey {
     }
 
     pub fn sub(&self, other_pk: &PublicKey) -> Self {
-        let this_pk = W3fPublicKey::<TinyBLS377>::from_bytes(self.0.as_ref())
+        let this_pk = W3fPublicKey::<TinyBLSG2>::from_bytes(self.0.as_ref())
             .unwrap()
             .0;
-        let other_pk_p = W3fPublicKey::<TinyBLS377>::from_bytes(other_pk.0.as_ref())
+        let other_pk_p = W3fPublicKey::<TinyBLSG2>::from_bytes(other_pk.0.as_ref())
             .unwrap()
             .0;
         let result = this_pk.sub(other_pk_p.clone());
         return PublicKey(
-            W3fPublicKey::<TinyBLS377>(result).to_bytes()[..]
+            W3fPublicKey::<TinyBLSG2>(result).to_bytes()[..]
                 .try_into()
                 .expect("Unexpected public key length"),
         );
@@ -244,16 +243,16 @@ impl Drop for SecretKey {
     }
 }
 
-fn generate_production_keypair() -> (PublicKey, SecretKey) {
+pub fn generate_production_keypair() -> (PublicKey, SecretKey) {
     let rng = &mut rand::thread_rng();
     generate_keypair(rng)
 }
 
-fn generate_keypair<R>(rng: &mut R) -> (PublicKey, SecretKey)
+pub fn generate_keypair<R>(rng: &mut R) -> (PublicKey, SecretKey)
 where
     R: RngCore + CryptoRng,
 {
-    let secret_key = W3fSecretKey::<TinyBLS<Bls12_377, ark_bls12_377::Config>>::generate(rng);
+    let secret_key = W3fSecretKey::<TinyBLSG2>::generate(rng);
     let secret_key_bytes = secret_key.to_bytes();
     let public_key_bytes = secret_key.into_public().to_bytes();
     let secret = SecretKey(
@@ -278,7 +277,7 @@ pub struct Signature {
 
 impl Signature {
     pub fn new(digest: &Digest, secret: &SecretKey) -> Self {
-        let mut private_key = W3fSecretKey::<TinyBLS377>::from_bytes(&secret.0).unwrap();
+        let mut private_key = W3fSecretKey::<TinyBLSG2>::from_bytes(&secret.0).unwrap();
         let mes = Message(digest.0, digest.0.to_vec());
         let sig = private_key.sign_once(&mes).to_bytes();
         let part1 = sig[..48].try_into().expect("Unexpected signature length");
@@ -303,7 +302,7 @@ impl Signature {
             Err(_) => return Err(bls_signatures::Error::GroupDecode),
         };
 
-        let public_key = match W3fPublicKey::<TinyBLS377>::from_bytes(&public_key.0) {
+        let public_key = match W3fPublicKey::<TinyBLSG2>::from_bytes(&public_key.0) {
             Ok(pk) => pk,
             Err(_) => return Err(bls_signatures::Error::GroupDecode),
         };
@@ -335,7 +334,7 @@ impl Signature {
                 let signature = W3fSignature::from_bytes(&sig.flatten())
                     .map_err(|_| bls_signatures::Error::GroupDecode)?;
 
-                let pub_key = W3fPublicKey::<TinyBLS377>::from_bytes(&key.0)
+                let pub_key = W3fPublicKey::<TinyBLSG2>::from_bytes(&key.0)
                     .map_err(|_| bls_signatures::Error::GroupDecode)?;
 
                 let signed_message = SignedMessage {
@@ -364,11 +363,11 @@ impl Signature {
             .collect();
         let pub_keys: Vec<_> = public_keys
             .into_iter()
-            .map(|public_key| W3fPublicKey::<TinyBLS377>::from_bytes(&public_key.0).unwrap())
+            .map(|public_key| W3fPublicKey::<TinyBLSG2>::from_bytes(&public_key.0).unwrap())
             .collect();
         let sig = W3fSignature::from_bytes(&self.flatten()).unwrap();
         let mut agr = w3f_bls::multi_pop_aggregator::MultiMessageSignatureAggregatorAssumingPoP::<
-            TinyBLS377,
+            TinyBLSG2,
         >::new();
         // TODO: Check if vec lens are equal
         for (msg, pk) in messages.iter().zip(pub_keys.iter()) {
@@ -388,18 +387,19 @@ impl Signature {
             .map(|signature| W3fSignature::from_bytes(&signature.flatten()).unwrap())
             .collect();
         let mut agr = w3f_bls::multi_pop_aggregator::MultiMessageSignatureAggregatorAssumingPoP::<
-            TinyBLS<ark_ec::bls12::Bls12<ark_bls12_377::Config>, ark_bls12_377::Config>,
+            TinyBLSG2,
         >::new();
         for sig in sigs.into_iter() {
             agr.add_signature(&sig);
-        };
-        let sig = agr.signature();
+        }
+        let agrr = &agr;
+        let sig = agrr.signature().to_bytes();
         let part1 = sig[..48].try_into().expect("Unexpected signature length");
         let part2 = sig[48..96].try_into().expect("Unexpected signature length");
         Signature { part1, part2 }
     }
 
-    /*pub fn multisig_aggregate(
+    pub fn multisig_aggregate(
         public_keys: &Vec<PublicKey>,
         signatures: &Vec<Signature>,
     ) -> Result<Self, CryptoError> {
@@ -409,16 +409,16 @@ impl Signature {
         if signatures.len() == 0 {
             return Err(bls_signatures::Error::ZeroSizedInput);
         }
-        let mut aggregated_sig = G2Projective::identity();
+        let mut aggregated_sig = G2Projective::<Config>::zero();
         for i in 0..signatures.len() {
-            let g2point = G2Affine::from_compressed(&signatures[i].flatten()).unwrap();
+            let g2point = G2Affine::<Config>::from_random_bytes(&signatures[i].flatten()).unwrap();
             aggregated_sig += g2point;
         }
-        let sig = W3fSignature::from(aggregated_sig).as_bytes();
+        let sig = W3fSignature::<TinyBLSG2>(aggregated_sig.into_affine().into_group()).to_bytes();
         let part1 = sig[..48].try_into().expect("Unexpected signature length");
         let part2 = sig[48..96].try_into().expect("Unexpected signature length");
         return Ok(Signature { part1, part2 });
-    }*/
+    }
 
     pub fn multisig_verify(
         &self,
