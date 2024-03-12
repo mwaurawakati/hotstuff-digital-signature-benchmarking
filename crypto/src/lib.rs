@@ -14,12 +14,11 @@ use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::sync::oneshot;
-use w3f_bls::single::SignedMessage;
 use w3f_bls::{DoublePublicKeyScheme, SerializableToBytes};
 use w3f_bls::Signed;
 use w3f_bls::{
     engine::UsualBLS, Message, PublicKey as W3fPublicKey, SecretKey as W3fSecretKey, DoublePublicKey, DoubleSignature,
-    Signature as W3fSignature, Keypair, double::DoubleSignedMessage
+    Signature as W3fSignature, Keypair, double::DoubleSignedMessage, SignedMessage
 };
 
 #[cfg(test)]
@@ -290,6 +289,11 @@ impl Signature {
         let sig = private_key.sign_once(&mes).to_bytes();
         let part1 = sig[..48].try_into().expect("Unexpected signature length");
         let part2 = sig[48..96].try_into().expect("Unexpected signature length");
+        /*let s = Signature { part1, part2 };
+        let dsig = <DoubleSignature<TinyBLSG2> as SerializableToBytes>::to_bytes(&DoubleSignature::from_bytes(&s.flatten()).expect("Unable to create doubel sig from single sig"));
+
+        let part1 = dsig[..48].try_into().expect("Unexpected signature length");
+        let part2 = dsig[48..96].try_into().expect("Unexpected signature length");*/
         Signature { part1, part2 }
     }
 
@@ -306,7 +310,7 @@ impl Signature {
 
     pub fn verify(&self, digest: &Digest, public_key: &PublicKey) -> Result<(), CryptoError> {
         // Double Signature
-        let sig = match DoubleSignature::from_bytes(&self.flatten()) {
+        let sig = match DoubleSignature::<TinyBLSG2>::from_bytes(&self.flatten()) {
             Ok(sig) => sig,
             Err(_) => return Err(bls_signatures::Error::GroupDecode),
         };
@@ -322,10 +326,10 @@ impl Signature {
         let mes = Message(digest.0, digest.0.to_vec());
 
         // Create a double signed message
-        let signed_message = DoubleSignedMessage {
+        let signed_message = SignedMessage {
             message: mes,
-            publickey: double_pk,
-            signature: sig,
+            publickey: public_key,
+            signature: W3fSignature::<TinyBLSG2>(sig.0),
         };
 
         // Verify signed message
@@ -345,17 +349,17 @@ impl Signature {
         let results: Result<Vec<()>, CryptoError> = votes
             .into_iter()
             .map(|(key, sig)| {
-                let signature = DoubleSignature::from_bytes(&sig.flatten())
+                let signature = DoubleSignature::<TinyBLSG2>::from_bytes(&sig.flatten())
                     .map_err(|_| bls_signatures::Error::GroupDecode)?;
 
                 let pub_key = W3fPublicKey::<TinyBLSG2>::from_bytes(&key.0)
                     .map_err(|_| bls_signatures::Error::GroupDecode)?;
 
                 let dpk = DoublePublicKey::<TinyBLSG2>(signature.0, pub_key.0);
-                let signed_message = DoubleSignedMessage {
+                let signed_message = SignedMessage {
                     message: msg.clone(),
-                    publickey: dpk,
-                    signature: signature,
+                    publickey: pub_key,
+                    signature: W3fSignature::<TinyBLSG2>(signature.0),
                 };
                 if signed_message.verify() {
                     Ok(())
@@ -432,7 +436,7 @@ impl Signature {
         let sig = W3fSignature::<TinyBLSG2>(aggregated_sig.into_affine().into_group()).to_bytes();
         let part1 = sig[..48].try_into().expect("Unexpected signature length");
         let part2 = sig[48..96].try_into().expect("Unexpected signature length");
-        return Ok(Signature { part1, part2 });
+        Ok(Signature { part1, part2 })
     }
 
     pub fn multisig_verify(
