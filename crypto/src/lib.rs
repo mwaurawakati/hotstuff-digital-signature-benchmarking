@@ -15,11 +15,11 @@ use std::fmt;
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::sync::oneshot;
 use w3f_bls::single::SignedMessage;
-use w3f_bls::SerializableToBytes;
+use w3f_bls::{DoublePublicKeyScheme, SerializableToBytes};
 use w3f_bls::Signed;
 use w3f_bls::{
-    engine::UsualBLS, Message, PublicKey as W3fPublicKey, SecretKey as W3fSecretKey,
-    Signature as W3fSignature,
+    engine::UsualBLS, Message, PublicKey as W3fPublicKey, SecretKey as W3fSecretKey, DoublePublicKey, DoubleSignature,
+    Signature as W3fSignature, Keypair, double::DoubleSignedMessage
 };
 
 #[cfg(test)]
@@ -92,21 +92,26 @@ impl PublicKey {
 
     /// Aggregates multiple public keys into a single public key.
     pub fn aggregate_public_keys(public_keys: &Vec<PublicKey>) -> Self {
+        // We use projective because it has implemnted the Add trait
+        // 
         let mut aggregated_pk = Projective::zero();
         for i in 0..public_keys.len() {
-            let point = W3fPublicKey::<TinyBLSG2>::from_bytes(&public_keys[i].0)
+            // Create double PK from our PK type
+            let point = DoublePublicKey::<TinyBLSG2>::from_bytes(&public_keys[i].0)
                 .unwrap()
-                .0
-                .into_affine();
+                .1// We use 1 because its the PK Group. Check https://docs.rs/w3f-bls/0.1.3/w3f_bls/double/struct.DoublePublicKey.html#
+                .into_affine(); // Convert PKG to affine
             aggregated_pk = aggregated_pk.add(point);
         }
+        // We convert public key projective to affine then config Group
         let gr = aggregated_pk.into_affine().into_group();
+        // convert the aggregated pk projective to double public key. We use identity for signature group
         let apk = PublicKey(
-            W3fPublicKey::<TinyBLSG2>(gr).to_bytes()[..]
+            DoublePublicKey::<TinyBLSG2>(Projective::zero().into_affine().into_group(), gr).to_bytes()[..]
                 .try_into()
                 .expect("Unexpected public key length"),
         );
-        return apk;
+        apk
     }
 
     pub fn hash_to_scalar(&self) -> Scalar {
@@ -133,18 +138,20 @@ impl PublicKey {
     }
 
     pub fn sub(&self, other_pk: &PublicKey) -> Self {
-        let this_pk = W3fPublicKey::<TinyBLSG2>::from_bytes(self.0.as_ref())
+        // convert self to double. 
+        let this_pk = DoublePublicKey::<TinyBLSG2>::from_bytes(self.0.as_ref())
             .unwrap()
-            .0;
-        let other_pk_p = W3fPublicKey::<TinyBLSG2>::from_bytes(other_pk.0.as_ref())
+            .1;
+        // convert other pk to double. 
+        let other_pk_p = DoublePublicKey::<TinyBLSG2>::from_bytes(other_pk.0.as_ref())
             .unwrap()
-            .0;
+            .1;
         let result = this_pk.sub(other_pk_p.clone());
-        return PublicKey(
-            W3fPublicKey::<TinyBLSG2>(result).to_bytes()[..]
+        PublicKey(
+            DoublePublicKey::<TinyBLSG2>(Projective::zero().into_affine().into_group(), result).to_bytes()[..]
                 .try_into()
                 .expect("Unexpected public key length"),
-        );
+        )
     }
 
     pub fn batch_sub(&self, other_pks: &Vec<PublicKey>) -> Self {
@@ -152,7 +159,7 @@ impl PublicKey {
         for pk in other_pks.iter() {
             apk = apk.sub(pk);
         }
-        return apk;
+        apk
     }
 }
 
@@ -252,9 +259,10 @@ pub fn generate_keypair<R>(rng: &mut R) -> (PublicKey, SecretKey)
 where
     R: RngCore + CryptoRng,
 {
-    let secret_key = W3fSecretKey::<TinyBLSG2>::generate(rng);
-    let secret_key_bytes = secret_key.to_bytes();
-    let public_key_bytes = secret_key.into_public().to_bytes();
+    //genration of keypair 
+    let keypair = Keypair::<TinyBLSG2>::generate(rng);
+    let secret_key_bytes = keypair.secret.to_bytes();
+    let public_key_bytes = keypair.into_double_public_key().to_bytes();
     let secret = SecretKey(
         secret_key_bytes[..32]
             .try_into()
@@ -297,24 +305,30 @@ impl Signature {
     }
 
     pub fn verify(&self, digest: &Digest, public_key: &PublicKey) -> Result<(), CryptoError> {
-        let sig = match W3fSignature::from_bytes(&self.flatten()) {
+        // Double Signature
+        let sig = match DoubleSignature::from_bytes(&self.flatten()) {
             Ok(sig) => sig,
             Err(_) => return Err(bls_signatures::Error::GroupDecode),
         };
 
+        // Public key
         let public_key = match W3fPublicKey::<TinyBLSG2>::from_bytes(&public_key.0) {
             Ok(pk) => pk,
             Err(_) => return Err(bls_signatures::Error::GroupDecode),
         };
 
+        // Create double public key
+        let double_pk = DoublePublicKey::<TinyBLSG2>(sig.0, public_key.0);
         let mes = Message(digest.0, digest.0.to_vec());
 
-        let signed_message = SignedMessage {
+        // Create a double signed message
+        let signed_message = DoubleSignedMessage {
             message: mes,
-            publickey: public_key,
+            publickey: double_pk,
             signature: sig,
         };
 
+        // Verify signed message
         if signed_message.verify() {
             Ok(())
         } else {
@@ -331,15 +345,16 @@ impl Signature {
         let results: Result<Vec<()>, CryptoError> = votes
             .into_iter()
             .map(|(key, sig)| {
-                let signature = W3fSignature::from_bytes(&sig.flatten())
+                let signature = DoubleSignature::from_bytes(&sig.flatten())
                     .map_err(|_| bls_signatures::Error::GroupDecode)?;
 
                 let pub_key = W3fPublicKey::<TinyBLSG2>::from_bytes(&key.0)
                     .map_err(|_| bls_signatures::Error::GroupDecode)?;
 
-                let signed_message = SignedMessage {
+                let dpk = DoublePublicKey::<TinyBLSG2>(signature.0, pub_key.0);
+                let signed_message = DoubleSignedMessage {
                     message: msg.clone(),
-                    publickey: pub_key,
+                    publickey: dpk,
                     signature: signature,
                 };
                 if signed_message.verify() {
@@ -375,9 +390,9 @@ impl Signature {
         }
         agr.add_signature(&sig);
         if agr.verify() {
-            return Ok(());
+            Ok(())
         } else {
-            return Err(bls_signatures::Error::GroupDecode);
+            Err(bls_signatures::Error::GroupDecode)
         }
     }
 
