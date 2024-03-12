@@ -18,8 +18,8 @@ use w3f_bls::single::SignedMessage;
 use w3f_bls::SerializableToBytes;
 use w3f_bls::Signed;
 use w3f_bls::{
-    engine::UsualBLS, Message, PublicKey as W3fPublicKey, SecretKey as W3fSecretKey,
-    Signature as W3fSignature,
+    engine::UsualBLS, DoublePublicKey, DoubleSignature, Message, PublicKey as W3fPublicKey,
+    SecretKey as W3fSecretKey, Signature as W3fSignature,
 };
 
 #[cfg(test)]
@@ -50,7 +50,13 @@ impl fmt::Debug for Digest {
 
 impl fmt::Display for Digest {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "{}", base64::encode(&self.0).get(0..16).unwrap())
+        write!(
+            f,
+            "{}",
+            base64::encode(&self.0)
+                .get(0..16)
+                .expect("failed to encode base 64")
+        )
     }
 }
 
@@ -95,7 +101,7 @@ impl PublicKey {
         let mut aggregated_pk = Projective::zero();
         for i in 0..public_keys.len() {
             let point = W3fPublicKey::<TinyBLSG2>::from_bytes(&public_keys[i].0)
-                .unwrap()
+                .expect("failed to get public key")
                 .0
                 .into_affine();
             aggregated_pk = aggregated_pk.add(point);
@@ -112,7 +118,9 @@ impl PublicKey {
     pub fn hash_to_scalar(&self) -> Scalar {
         let mut hasher = Sha256::new();
         hasher.update(&self.encode_base64());
-        let hash: [u8; 32] = hasher.finalize()[..].try_into().unwrap();
+        let hash: [u8; 32] = hasher.finalize()[..]
+            .try_into()
+            .expect("failed to finalize harsher");
         // convert the hash to little endian
         let mut le_hash = [0u8; 32];
         for i in 0..hash.len() - 4 {
@@ -129,15 +137,15 @@ impl PublicKey {
                 le_hash[i] = hash[i - 3];
             }
         }
-        return Scalar::from_bytes(&le_hash).unwrap();
+        Scalar::from_bytes(&le_hash).unwrap()
     }
 
     pub fn sub(&self, other_pk: &PublicKey) -> Self {
         let this_pk = W3fPublicKey::<TinyBLSG2>::from_bytes(self.0.as_ref())
-            .unwrap()
+            .expect("failed to create public key")
             .0;
         let other_pk_p = W3fPublicKey::<TinyBLSG2>::from_bytes(other_pk.0.as_ref())
-            .unwrap()
+            .expect("failed to create public key")
             .0;
         let result = this_pk.sub(other_pk_p.clone());
         return PublicKey(
@@ -183,7 +191,11 @@ impl<'de> Deserialize<'de> for PublicKey {
 
 impl fmt::Display for PublicKey {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "{}", self.encode_base64().get(0..16).unwrap())
+        write!(
+            f,
+            "{}",
+            self.encode_base64().get(0..16).expect("failed to encode")
+        )
     }
 }
 
@@ -277,7 +289,8 @@ pub struct Signature {
 
 impl Signature {
     pub fn new(digest: &Digest, secret: &SecretKey) -> Self {
-        let mut private_key = W3fSecretKey::<TinyBLSG2>::from_bytes(&secret.0).unwrap();
+        let mut private_key = W3fSecretKey::<TinyBLSG2>::from_bytes(&secret.0)
+            .expect("failed to create public key from bytes");
         let mes = Message(digest.0, digest.0.to_vec());
         let sig = private_key.sign_once(&mes).to_bytes();
         let part1 = sig[..48].try_into().expect("Unexpected signature length");
@@ -363,9 +376,13 @@ impl Signature {
             .collect();
         let pub_keys: Vec<_> = public_keys
             .into_iter()
-            .map(|public_key| W3fPublicKey::<TinyBLSG2>::from_bytes(&public_key.0).unwrap())
+            .map(|public_key| {
+                W3fPublicKey::<TinyBLSG2>::from_bytes(&public_key.0)
+                    .expect("failed to create public key from bytes")
+            })
             .collect();
-        let sig = W3fSignature::from_bytes(&self.flatten()).unwrap();
+        let sig = W3fSignature::from_bytes(&self.flatten())
+            .expect("failed to create public key from bytes");
         let mut agr = w3f_bls::multi_pop_aggregator::MultiMessageSignatureAggregatorAssumingPoP::<
             TinyBLSG2,
         >::new();
@@ -384,7 +401,10 @@ impl Signature {
     pub fn aggregate_signatures(signatures: &Vec<Signature>) -> Self {
         let sigs: Vec<_> = signatures
             .into_iter()
-            .map(|signature| W3fSignature::from_bytes(&signature.flatten()).unwrap())
+            .map(|signature| {
+                W3fSignature::from_bytes(&signature.flatten())
+                    .expect("failed to create signature from bytes")
+            })
             .collect();
         let mut agr = w3f_bls::multi_pop_aggregator::MultiMessageSignatureAggregatorAssumingPoP::<
             TinyBLSG2,
@@ -409,10 +429,14 @@ impl Signature {
         if signatures.len() == 0 {
             return Err(bls_signatures::Error::ZeroSizedInput);
         }
-        let mut aggregated_sig = G2Projective::<Config>::zero();
+        let mut aggregated_sig = Projective::zero();
         for i in 0..signatures.len() {
-            let g2point = G2Affine::<Config>::from_random_bytes(&signatures[i].flatten()).unwrap();
-            aggregated_sig += g2point;
+            let g2point =
+                W3fSignature::<TinyBLSG2>::from_bytes(&signatures[i].flatten().as_slice())
+                    .expect("failed to create G2 affine")
+                    .0
+                    .into_affine();
+            aggregated_sig = aggregated_sig.add(g2point);
         }
         let sig = W3fSignature::<TinyBLSG2>(aggregated_sig.into_affine().into_group()).to_bytes();
         let part1 = sig[..48].try_into().expect("Unexpected signature length");
