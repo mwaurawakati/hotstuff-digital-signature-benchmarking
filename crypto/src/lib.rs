@@ -1,3 +1,5 @@
+// the ark framework which this the base frameowork 3bl uses
+//
 use ark_bls12_381::Config;
 use ark_ec::bls12::{G2Affine, G2Projective};
 use ark_ec::models::short_weierstrass::Projective;
@@ -14,16 +16,14 @@ use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::sync::oneshot;
-use w3f_bls::{DoublePublicKeyScheme, SerializableToBytes};
 use w3f_bls::Signed;
 use w3f_bls::{
-    engine::UsualBLS, Message, PublicKey as W3fPublicKey, SecretKey as W3fSecretKey, DoublePublicKey, DoubleSignature,
-    Signature as W3fSignature, Keypair, double::DoubleSignedMessage, SignedMessage
+    double::DoubleSignedMessage, engine::UsualBLS, DoublePublicKey, DoubleSignature, Keypair,
+    KeypairVT, Message, PublicKey as W3fPublicKey, SecretKey as W3fSecretKey, SecretKeyVT,
+    Signature as W3fSignature, SignedMessage,
 };
+use w3f_bls::{DoublePublicKeyScheme, SerializableToBytes, TinyBLS};
 
-#[cfg(test)]
-#[path = "tests/crypto_tests.rs"]
-pub mod crypto_tests;
 pub type TinyBLSG2 = UsualBLS<ark_bls12_381::Bls12_381, ark_bls12_381::Config>;
 pub type CryptoError = bls_signatures::Error;
 
@@ -92,13 +92,20 @@ impl PublicKey {
     /// Aggregates multiple public keys into a single public key.
     pub fn aggregate_public_keys(public_keys: &Vec<PublicKey>) -> Self {
         // We use projective because it has implemnted the Add trait
-        // 
+        //
         let mut aggregated_pk = Projective::zero();
         for i in 0..public_keys.len() {
             // Create double PK from our PK type
-            let point = DoublePublicKey::<TinyBLSG2>::from_bytes(&public_keys[i].0)
-                .unwrap()
-                .1// We use 1 because its the PK Group. Check https://docs.rs/w3f-bls/0.1.3/w3f_bls/double/struct.DoublePublicKey.html#
+            let array1: [u8; 96] = [0; 96];
+            let combined: [u8; 144] = {
+                let mut temp = [0u8; 144];
+                temp[..96].copy_from_slice(&array1);
+                temp[96..].copy_from_slice(&public_keys[i].0);
+                temp
+            };
+
+            let point = DoublePublicKey::<TinyBLSG2>(Projective::zero().into_affine().into_group(), W3fPublicKey::<TinyBLSG2>::from_bytes(public_keys[1].0.as_slice()).unwrap().0)
+                .1 // We use 1 because its the PK Group. Check https://docs.rs/w3f-bls/0.1.3/w3f_bls/double/struct.DoublePublicKey.html#
                 .into_affine(); // Convert PKG to affine
             aggregated_pk = aggregated_pk.add(point);
         }
@@ -106,7 +113,8 @@ impl PublicKey {
         let gr = aggregated_pk.into_affine().into_group();
         // convert the aggregated pk projective to double public key. We use identity for signature group
         let apk = PublicKey(
-            DoublePublicKey::<TinyBLSG2>(Projective::zero().into_affine().into_group(), gr).to_bytes()[..]
+            DoublePublicKey::<TinyBLSG2>(Projective::zero().into_affine().into_group(), gr)
+                .to_bytes()[96..144] // Public is the trailling 48bytes. The precedng are for sig group
                 .try_into()
                 .expect("Unexpected public key length"),
         );
@@ -137,17 +145,31 @@ impl PublicKey {
     }
 
     pub fn sub(&self, other_pk: &PublicKey) -> Self {
-        // convert self to double. 
-        let this_pk = DoublePublicKey::<TinyBLSG2>::from_bytes(self.0.as_ref())
-            .unwrap()
-            .1;
-        // convert other pk to double. 
-        let other_pk_p = DoublePublicKey::<TinyBLSG2>::from_bytes(other_pk.0.as_ref())
-            .unwrap()
-            .1;
+        // convert self to double.
+        let this_pk = DoublePublicKey::<TinyBLSG2>(
+            Projective::zero().into_affine().into_group(),
+            W3fPublicKey::<TinyBLSG2>::from_bytes(self.0.as_ref())
+                .unwrap()
+                .0,
+        )
+        .1;
+
+        // convert other pk to double.
+        let other_pk_p = DoublePublicKey::<TinyBLSG2>(
+            Projective::zero().into_affine().into_group(),
+            W3fPublicKey::<TinyBLSG2>::from_bytes(other_pk.0.as_ref())
+                .unwrap()
+                .0,
+        )
+        .1;
         let result = this_pk.sub(other_pk_p.clone());
+        // convert double public key to bytes
         PublicKey(
-            DoublePublicKey::<TinyBLSG2>(Projective::zero().into_affine().into_group(), result).to_bytes()[..]
+            DoublePublicKey::<TinyBLSG2>(
+                Projective::zero().into_affine().into_group(),
+                W3fPublicKey::<TinyBLSG2>(result).0,
+            )
+            .to_bytes()[96..144]
                 .try_into()
                 .expect("Unexpected public key length"),
         )
@@ -258,17 +280,20 @@ pub fn generate_keypair<R>(rng: &mut R) -> (PublicKey, SecretKey)
 where
     R: RngCore + CryptoRng,
 {
-    //genration of keypair 
+    //genration of keypair
     let keypair = Keypair::<TinyBLSG2>::generate(rng);
+    // get the secret to key pair
     let secret_key_bytes = keypair.secret.to_bytes();
+    // Get double public key from keypair
     let public_key_bytes = keypair.into_double_public_key().to_bytes();
     let secret = SecretKey(
         secret_key_bytes[..32]
             .try_into()
             .expect("Unexpected secret length"),
     );
+    // create 48 bytes pk with the trailing 48 bytes of dpk
     let public = PublicKey(
-        public_key_bytes[..48]
+        public_key_bytes[96..144]
             .try_into()
             .expect("Unexpected public length"),
     );
@@ -284,16 +309,15 @@ pub struct Signature {
 
 impl Signature {
     pub fn new(digest: &Digest, secret: &SecretKey) -> Self {
-        let mut private_key = W3fSecretKey::<TinyBLSG2>::from_bytes(&secret.0).unwrap();
+        // convert sec key to public key
+        let private_key = SecretKeyVT::<TinyBLSG2>::from_bytes(&secret.0).unwrap();
+        // digest to message
         let mes = Message(digest.0, digest.0.to_vec());
-        let sig = private_key.sign_once(&mes).to_bytes();
+        // create signature
+        let sig = private_key.sign(&mes).to_bytes(); //kp.sign(&mes).to_bytes();
+                                                     // Its not necessary to create double pk.
         let part1 = sig[..48].try_into().expect("Unexpected signature length");
         let part2 = sig[48..96].try_into().expect("Unexpected signature length");
-        /*let s = Signature { part1, part2 };
-        let dsig = <DoubleSignature<TinyBLSG2> as SerializableToBytes>::to_bytes(&DoubleSignature::from_bytes(&s.flatten()).expect("Unable to create doubel sig from single sig"));
-
-        let part1 = dsig[..48].try_into().expect("Unexpected signature length");
-        let part2 = dsig[48..96].try_into().expect("Unexpected signature length");*/
         Signature { part1, part2 }
     }
 
@@ -309,27 +333,27 @@ impl Signature {
     }
 
     pub fn verify(&self, digest: &Digest, public_key: &PublicKey) -> Result<(), CryptoError> {
-        // Double Signature
-        let sig = match DoubleSignature::<TinyBLSG2>::from_bytes(&self.flatten()) {
+        let sig = match W3fSignature::<TinyBLSG2>::from_bytes(&self.flatten()) {
             Ok(sig) => sig,
-            Err(_) => return Err(bls_signatures::Error::GroupDecode),
+            Err(e) => {
+                println!("error creating double signature {}", e);
+                return Err(bls_signatures::Error::GroupDecode);
+            }
         };
 
         // Public key
-        let public_key = match W3fPublicKey::<TinyBLSG2>::from_bytes(&public_key.0) {
+        let pk = match W3fPublicKey::<TinyBLSG2>::from_bytes(&public_key.0) {
             Ok(pk) => pk,
             Err(_) => return Err(bls_signatures::Error::GroupDecode),
         };
 
-        // Create double public key
-        let double_pk = DoublePublicKey::<TinyBLSG2>(sig.0, public_key.0);
         let mes = Message(digest.0, digest.0.to_vec());
 
         // Create a double signed message
         let signed_message = SignedMessage {
-            message: mes,
-            publickey: public_key,
-            signature: W3fSignature::<TinyBLSG2>(sig.0),
+            message: mes.clone(),
+            publickey: pk,
+            signature: sig,
         };
 
         // Verify signed message
@@ -361,7 +385,7 @@ impl Signature {
                     publickey: pub_key,
                     signature: W3fSignature::<TinyBLSG2>(signature.0),
                 };
-                if signed_message.verify() {
+                if signature.verify(&msg.clone(), &dpk) {
                     Ok(())
                 } else {
                     Err(bls_signatures::Error::GroupDecode)
@@ -430,8 +454,11 @@ impl Signature {
         }
         let mut aggregated_sig = G2Projective::<Config>::zero();
         for i in 0..signatures.len() {
-            let g2point = G2Affine::<Config>::from_random_bytes(&signatures[i].flatten()).unwrap();
-            aggregated_sig += g2point;
+            let s = W3fSignature::<TinyBLSG2>::from_bytes(&signatures[i].flatten())
+                .unwrap()
+                .0
+                .into_affine();
+            aggregated_sig = aggregated_sig.add(s);
         }
         let sig = W3fSignature::<TinyBLSG2>(aggregated_sig.into_affine().into_group()).to_bytes();
         let part1 = sig[..48].try_into().expect("Unexpected signature length");
